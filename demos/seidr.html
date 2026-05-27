@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SEIÐR — Viking Shaman Eyes</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --amber:   #e8a020;
+    --gold:    #f5c842;
+    --white:   #ffffff;
+    --void:    #080808;
+    --rune-1:  #00e5ff;   /* cyan  — Algiz */
+    --rune-2:  #ff2d78;   /* pink  — Othala */
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--void);
+    overflow-x: hidden;
+    font-family: 'Georgia', serif;
+  }
+
+  /* ── SCROLL GHOST gives the page its height ── */
+  #scroll-ghost {
+    position: relative;
+    width: 100%;
+    height: 700vh;
+  }
+
+  /* ── STICKY STAGE — always fullscreen ── */
+  #stage {
+    position: sticky;
+    top: 0;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── FACE IMAGE — covers full viewport, object-fit to keep face centred ── */
+  #face {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 20%;
+    display: block;
+  }
+
+  /* ── CANVAS — sits on top of face, draws eye overlays ── */
+  #eye-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    mix-blend-mode: normal;
+  }
+
+  /* ── TITLE WORD overlay ── */
+  #title {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: clamp(3rem, 10vw, 8rem);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: rgba(245, 200, 66, 0);
+    text-shadow:
+      0 0 40px rgba(245, 200, 66, 0),
+      0 0 80px rgba(245, 200, 66, 0);
+    transition: none;
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  /* ── SCROLL CUE ── */
+  #scroll-cue {
+    position: absolute;
+    bottom: 2.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    opacity: 1;
+    transition: opacity 0.6s ease;
+  }
+  #scroll-cue span {
+    font-size: 0.65rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: rgba(232, 160, 32, 0.6);
+  }
+  #scroll-cue .arrow {
+    width: 1px;
+    height: 3rem;
+    background: linear-gradient(to bottom, rgba(232,160,32,0.6), transparent);
+    animation: pulse-arrow 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse-arrow {
+    0%, 100% { opacity: 0.4; transform: scaleY(1); }
+    50%       { opacity: 1;   transform: scaleY(1.15); }
+  }
+
+  /* ── VIGNETTE — darkens edges ── */
+  #vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center,
+      transparent 30%,
+      rgba(8,8,8,0.5) 70%,
+      rgba(8,8,8,0.85) 100%);
+    pointer-events: none;
+  }
+
+  /* ── PHASE LABEL (debug feel / aesthetic) ── */
+  #phase-label {
+    position: absolute;
+    bottom: 2.5rem;
+    right: 2rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.18);
+    font-family: 'Courier New', monospace;
+    transition: opacity 0.4s;
+  }
+
+  /* ── SPACE ABOVE / BELOW ghost padding ── */
+  .spacer { width: 100%; height: 60vh; }
+
+  /* ── BELOW-FOLD CONTENT SECTION ── */
+  #lore-section {
+    position: relative;
+    background: #0d0a06;
+    padding: 8rem 4rem;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 4rem;
+    align-items: start;
+    border-top: 1px solid rgba(232,160,32,0.15);
+  }
+  .lore-col {
+    color: rgba(220,200,160,0.75);
+    font-size: 0.9rem;
+    line-height: 1.9;
+    font-family: 'Georgia', serif;
+  }
+  .lore-col h3 {
+    font-size: 0.65rem;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: rgba(232,160,32,0.5);
+    margin-bottom: 1.5rem;
+    font-family: 'Courier New', monospace;
+  }
+  .lore-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+  }
+  .rune-frame {
+    border: 1px solid rgba(232,160,32,0.3);
+    padding: 1.5rem;
+    background: rgba(232,160,32,0.04);
+  }
+  .rune-frame svg {
+    display: block;
+  }
+  .rune-caption {
+    font-size: 0.55rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: rgba(232,160,32,0.4);
+    text-align: center;
+    font-family: 'Courier New', monospace;
+  }
+
+  @media (max-width: 768px) {
+    #lore-section {
+      grid-template-columns: 1fr;
+      padding: 4rem 1.5rem;
+    }
+    .lore-center { order: -1; }
+  }
+</style>
+</head>
+<body>
+
+<div id="scroll-ghost">
+  <div class="spacer"></div>
+
+  <div id="stage">
+    <img id="face" src="../assets/img/shaman_face.png" alt="Viking Shaman" />
+    <div id="vignette"></div>
+    <canvas id="eye-canvas"></canvas>
+    <div id="title">SEIÐR</div>
+    <div id="scroll-cue">
+      <span>scroll</span>
+      <div class="arrow"></div>
+    </div>
+    <div id="phase-label"></div>
+  </div>
+
+  <div class="spacer"></div>
+</div>
+
+<!-- ── LORE SECTION ── -->
+<div id="lore-section">
+  <div class="lore-col">
+    <h3>Seiðr</h3>
+    <p>In Norse cosmology, seiðr was a form of magic practiced by the völva — the wandering shaman-seeress. Through ritual trance induced by sacred plants, drumming, and chant, she could travel between the nine worlds of Yggdrasil and return with visions of fate.</p>
+    <br/>
+    <p>The mushroom — perhaps Amanita muscaria, the fly agaric — was known to shamanic cultures across the circumpolar north. Its consumption broke the veil between worlds.</p>
+  </div>
+
+  <div class="lore-center">
+    <div class="rune-frame">
+      <!-- Vegvísir — Norse compass, 8 arms -->
+      <svg width="120" height="120" viewBox="-60 -60 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- outer ring -->
+        <circle cx="0" cy="0" r="55" stroke="rgba(232,160,32,0.3)" stroke-width="0.5"/>
+        <!-- 8 arms of Vegvísir -->
+        <g stroke="rgba(232,160,32,0.7)" stroke-width="1.5" stroke-linecap="round">
+          <!-- N --> <line x1="0" y1="-8"  x2="0"  y2="-40"/>
+                    <line x1="-6" y1="-28" x2="0"  y2="-40"/> <line x1="6" y1="-28" x2="0" y2="-40"/>
+                    <line x1="-6" y1="-28" x2="-6" y2="-34"/>
+          <!-- NE --> <line x1="6" y1="-6"  x2="30" y2="-30"/>
+                     <line x1="22" y1="-38" x2="30" y2="-30"/> <line x1="30" y1="-30" x2="30" y2="-22"/>
+          <!-- E --> <line x1="8" y1="0"   x2="40" y2="0"/>
+                    <line x1="30" y1="-6"  x2="40" y2="0"/> <line x1="30" y1="6" x2="40" y2="0"/>
+                    <line x1="28" y1="-6"  x2="28" y2="6"/>
+          <!-- SE --> <line x1="6" y1="6"   x2="30" y2="30"/>
+                     <line x1="30" y1="22" x2="30" y2="30"/> <line x1="22" y1="30" x2="30" y2="30"/>
+          <!-- S --> <line x1="0" y1="8"   x2="0"  y2="40"/>
+                    <line x1="-7" y1="25"  x2="0"  y2="35"/> <line x1="7" y1="25" x2="0" y2="35"/>
+          <!-- SW --> <line x1="-6" y1="6"  x2="-30" y2="30"/>
+                     <line x1="-30" y1="22" x2="-30" y2="30"/> <line x1="-22" y1="30" x2="-30" y2="30"/>
+                     <line x1="-30" y1="22" x2="-24" y2="22"/>
+          <!-- W --> <line x1="-8" y1="0"  x2="-40" y2="0"/>
+                    <line x1="-30" y1="-6" x2="-40" y2="0"/> <line x1="-30" y1="6" x2="-40" y2="0"/>
+          <!-- NW --> <line x1="-6" y1="-6" x2="-30" y2="-30"/>
+                     <line x1="-30" y1="-22" x2="-30" y2="-30"/> <line x1="-22" y1="-30" x2="-30" y2="-30"/>
+                     <line x1="-30" y1="-22" x2="-22" y2="-30"/>
+        </g>
+        <!-- centre dot -->
+        <circle cx="0" cy="0" r="3" fill="rgba(232,160,32,0.6)"/>
+      </svg>
+    </div>
+    <div class="rune-caption">Vegvísir · Wayfinder</div>
+  </div>
+
+  <div class="lore-col">
+    <h3>Völva</h3>
+    <p>The völva carried a staff (völr) and wore ritual garments adorned with amber, bone runes, and the pelts of animal spirits. She was both feared and revered — capable of seeing the threads of wyrd, the web of fate woven by the Norns beneath Yggdrasil.</p>
+    <br/>
+    <p>When the mushroom opened her inner eye, the runes did not need to be read — they appeared burning behind the retina, carved into the fabric of sight itself.</p>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════
+   SEIÐR — Scroll-driven eye possession engine
+   6 phases. Elder Futhark runes. Canvas overdraw.
+   ════════════════════════════════════════════════════════ */
+
+const canvas  = document.getElementById('eye-canvas');
+const ctx     = canvas.getContext('2d');
+const title   = document.getElementById('title');
+const cue     = document.getElementById('scroll-cue');
+const label   = document.getElementById('phase-label');
+const ghost   = document.getElementById('scroll-ghost');
+const face    = document.getElementById('face');
+
+// ── EYE POSITIONS (as fraction of viewport, calibrated to the photo) ──
+// Image covers full viewport, face fills ~80% width, eyes at ~42% from top
+// Left eye centre: ~35% x,  42% y
+// Right eye centre: ~65% x, 42% y
+// iris radius: ~8% of viewport width
+const EYE_POSITIONS = [
+  { xFrac: 0.355, yFrac: 0.415 },  // left eye
+  { xFrac: 0.645, yFrac: 0.415 },  // right eye
+];
+
+// ── COLOUR PALETTE ──
+const AMBER   = { r:232, g:160, b:32 };
+const GOLD    = { r:245, g:200, b:66 };
+const CYAN    = { r:0,   g:229, b:255 };
+const PINK    = { r:255, g:45,  b:120 };
+const WHITE   = { r:255, g:255, b:255 };
+
+// ── PHASE DEFINITIONS ──
+// Each phase: [start%, end%] of scroll progress
+const PHASES = [
+  { name:'NORMAL',    range:[0.00, 0.10] },
+  { name:'DILATE',    range:[0.10, 0.24] },
+  { name:'SPIRAL',    range:[0.24, 0.40] },
+  { name:'ALGIZ',     range:[0.40, 0.56] },  // rune I — cyan
+  { name:'VOID',      range:[0.56, 0.68] },  // pure white eyes
+  { name:'OTHALA',    range:[0.68, 0.82] },  // rune II — pink/gold
+  { name:'RETURN',    range:[0.82, 1.00] },
+];
+
+// ── RAF loop angle for animations ──
+let loopAngle = 0;
+let raf = 0;
+
+// ── RESIZE ──
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── HELPERS ──
+function lerp(a, b, t) { return a + (b - a) * t; }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function easeInOut(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+function rgba(c, a) { return `rgba(${c.r},${c.g},${c.b},${a})`; }
+function mix(a, b, t) {
+  return { r: lerp(a.r,b.r,t)|0, g: lerp(a.g,b.g,t)|0, b: lerp(a.b,b.b,t)|0 };
+}
+
+// ── PHASE PROGRESS ──
+function getPhaseProgress(progress) {
+  for (let i = 0; i < PHASES.length; i++) {
+    const [s, e] = PHASES[i].range;
+    if (progress >= s && progress <= e) {
+      return { phase: i, t: clamp((progress - s) / (e - s), 0, 1) };
+    }
+  }
+  return { phase: PHASES.length - 1, t: 1 };
+}
+
+// ── DRAW ONE EYE IRIS OVERLAY ──
+function drawEye(cx, cy, irisR, phase, t, angle) {
+  const pupilR = irisR * 0.28;
+
+  // helper: draw rune glyph at eye centre
+  function drawRune(type, colour, alpha, scale) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.strokeStyle = `rgba(${colour.r},${colour.g},${colour.b},${alpha})`;
+    ctx.lineWidth = irisR * 0.09;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    // glow
+    ctx.shadowColor = `rgba(${colour.r},${colour.g},${colour.b},${alpha * 0.8})`;
+    ctx.shadowBlur = irisR * 0.6;
+
+    if (type === 'ALGIZ') {
+      // ᛉ — Algiz: vertical line with two angled branches up, one down
+      const h = irisR * 0.7;
+      ctx.beginPath();
+      ctx.moveTo(0, h); ctx.lineTo(0, -h);  // vertical
+      ctx.moveTo(0, -h * 0.1); ctx.lineTo(-h * 0.55, -h * 0.7); // left branch
+      ctx.moveTo(0, -h * 0.1); ctx.lineTo( h * 0.55, -h * 0.7); // right branch
+      ctx.stroke();
+    } else if (type === 'OTHALA') {
+      // ᛟ — Othala: diamond with two feet
+      const hw = irisR * 0.45, hh = irisR * 0.5, legY = irisR * 0.55;
+      ctx.beginPath();
+      ctx.moveTo(0,   -hh);  // top
+      ctx.lineTo(hw,   0);   // right
+      ctx.lineTo(0,    hh);  // bottom
+      ctx.lineTo(-hw,  0);   // left
+      ctx.closePath();
+      ctx.stroke();
+      // two legs
+      ctx.beginPath();
+      ctx.moveTo(-hw * 0.6, hh * 0.4); ctx.lineTo(-hw * 0.6, legY);  // left leg
+      ctx.moveTo( hw * 0.6, hh * 0.4); ctx.lineTo( hw * 0.6, legY);  // right leg
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ── PHASE 0: NORMAL — no overlay ──
+  if (phase === 0) {
+    // nothing, natural eyes visible
+    return;
+  }
+
+  // ── PHASE 1: DILATE — pupil expands, amber rim glows ──
+  if (phase === 1) {
+    const big = easeInOut(t);
+    const dilatedPupil = lerp(pupilR, irisR * 0.72, big);
+    // amber iris ring
+    const ringAlpha = lerp(0, 0.55, big);
+    const grad = ctx.createRadialGradient(cx, cy, dilatedPupil, cx, cy, irisR);
+    grad.addColorStop(0,   rgba(AMBER, 0));
+    grad.addColorStop(0.5, rgba(GOLD,  ringAlpha));
+    grad.addColorStop(1,   rgba(AMBER, ringAlpha * 0.3));
+    ctx.beginPath();
+    ctx.arc(cx, cy, irisR, 0, Math.PI*2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    // expanding pupil darkening
+    ctx.beginPath();
+    ctx.arc(cx, cy, dilatedPupil, 0, Math.PI*2);
+    ctx.fillStyle = rgba({r:4,g:2,b:0}, lerp(0.3, 0.85, big));
+    ctx.fill();
+    return;
+  }
+
+  // ── PHASE 2: SPIRAL — psychedelic swirl ──
+  if (phase === 2) {
+    // large dilated pupil stays
+    ctx.beginPath();
+    ctx.arc(cx, cy, irisR * 0.7, 0, Math.PI*2);
+    ctx.fillStyle = rgba({r:4,g:2,b:0}, 0.7);
+    ctx.fill();
+
+    // spinning spiral
+    const spiralTurns = 3 + t * 2;
+    const spinSpeed = angle * (1 + t * 2);
+    const spiralAlpha = easeInOut(t);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, irisR, 0, Math.PI*2);
+    ctx.clip();
+
+    for (let arm = 0; arm < 2; arm++) {
+      ctx.beginPath();
+      const armOffset = arm * Math.PI;
+      for (let i = 0; i <= 200; i++) {
+        const frac = i / 200;
+        const r = frac * irisR * 0.68;
+        const a = frac * Math.PI * 2 * spiralTurns + spinSpeed + armOffset;
+        const x = cx + r * Math.cos(a);
+        const y = cy + r * Math.sin(a);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      const hue = arm === 0 ? GOLD : AMBER;
+      ctx.strokeStyle = rgba(hue, spiralAlpha * 0.8);
+      ctx.lineWidth = irisR * 0.06;
+      ctx.lineCap = 'round';
+      ctx.shadowColor = rgba(GOLD, spiralAlpha * 0.5);
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+    }
+
+    // golden outer ring
+    const rimGrad = ctx.createRadialGradient(cx, cy, irisR*0.6, cx, cy, irisR);
+    rimGrad.addColorStop(0, rgba(GOLD, 0));
+    rimGrad.addColorStop(1, rgba(GOLD, spiralAlpha * 0.6));
+    ctx.beginPath();
+    ctx.arc(cx, cy, irisR, 0, Math.PI*2);
+    ctx.fillStyle = rimGrad;
+    ctx.fill();
+
+    ctx.restore();
+    return;
+  }
+
+  // ── PHASE 3: ALGIZ rune burns in ──
+  if (phase === 3) {
+    const appear = easeInOut(t);
+    // eyes go white-gold
+    const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, irisR);
+    bg.addColorStop(0,   rgba(GOLD,  appear * 0.95));
+    bg.addColorStop(0.6, rgba(WHITE, appear * 0.85));
+    bg.addColorStop(1,   rgba(CYAN,  appear * 0.4));
+    ctx.beginPath();
+    ctx.arc(cx, cy, irisR, 0, Math.PI*2);
+    ctx.fillStyle = bg;
+    ctx.fill();
+    // rune
+    const pulse = 0.7 + 0.3 * Math.sin(angle * 3);
+    drawRune('ALGIZ', CYAN, appear * pulse, 1);
+    return;
+  }
+
+  // ── PHASE 4: VOID — pure white ──
+  if (phase === 4) {
+    // full white eye
+    ctx.beginPath();
+    ctx.arc(cx, cy, irisR * 1.05, 0, Math.PI*2);
+    ctx.fillStyle = rgba(WHITE, easeInOut(t));
+    ctx.fill();
+    // subtle glow ring
+    const vGrad = ctx.createRadialGradient(cx, cy, irisR * 0.7, cx, cy, irisR * 1.2);
+    vGrad.addColorStop(0, rgba(WHITE, 0));
+    vGrad.addColorStop(1, rgba(GOLD,  easeInOut(t) * 0.4));
+    ctx.beginPath();
+    ctx.arc(cx, cy, irisR * 1.2, 0, Math.PI*2);
+    ctx.fillStyle = vGrad;
+    ctx.fill();
+    return;
+  }
+
+  // ── PHASE 5: OTHALA rune in blazing amber-pink ──
+  if (phase === 5) {
+    const appear = easeInOut(t);
+    // deep amber iris returns from white
+    const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, irisR);
+    bg.addColorStop(0,   rgba(PINK, appear * 0.5));
+    bg.addColorStop(0.4, rgba(AMBER, appear * 0.9));
+    bg.addColorStop(1,   rgba(GOLD,  appear * 0.7));
+    ctx.beginPath();
+    ctx.arc(cx, cy, irisR, 0, Math.PI*2);
+    ctx.fillStyle = bg;
+    ctx.fill();
+    // pupil (normal size now)
+    ctx.beginPath();
+    ctx.arc(cx, cy, pupilR, 0, Math.PI*2);
+    ctx.fillStyle = rgba({r:4,g:2,b:0}, appear * 0.95);
+    ctx.fill();
+    const pulse = 0.65 + 0.35 * Math.sin(angle * 2.5);
+    drawRune('OTHALA', PINK, appear * pulse, 1);
+    return;
+  }
+
+  // ── PHASE 6: RETURN — spiral rewinds, irises come back ──
+  if (phase === 6) {
+    const unwind = 1 - easeInOut(t);
+    if (unwind < 0.01) return; // fully returned
+
+    // fading amber overlay
+    const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, irisR);
+    bg.addColorStop(0, rgba({r:4,g:2,b:0}, 0));
+    bg.addColorStop(0.4, rgba(AMBER, unwind * 0.35));
+    bg.addColorStop(1,   rgba(GOLD,  unwind * 0.25));
+    ctx.beginPath();
+    ctx.arc(cx, cy, irisR, 0, Math.PI*2);
+    ctx.fillStyle = bg;
+    ctx.fill();
+
+    // fading reverse spiral
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, irisR, 0, Math.PI*2);
+    ctx.clip();
+    ctx.beginPath();
+    for (let i = 0; i <= 150; i++) {
+      const frac = i / 150;
+      const r = frac * irisR * 0.6;
+      const a = frac * Math.PI * 2 * 3 - angle * 1.5;
+      const x = cx + r * Math.cos(a);
+      const y = cy + r * Math.sin(a);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = rgba(GOLD, unwind * 0.4);
+    ctx.lineWidth = irisR * 0.04;
+    ctx.shadowColor = rgba(GOLD, unwind * 0.3);
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+}
+
+// ── DRAW FULL FRAME ──
+function draw(progress) {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const { phase, t } = getPhaseProgress(progress);
+
+  // compute iris radius from viewport — image is full-bleed, eyes ~8% wide
+  const irisR = W * 0.072;
+
+  // eye centres in pixels
+  const eyes = EYE_POSITIONS.map(e => ({
+    cx: W * e.xFrac,
+    cy: H * e.yFrac,
+  }));
+
+  // draw both eyes
+  for (const { cx, cy } of eyes) {
+    drawEye(cx, cy, irisR, phase, t, loopAngle);
+  }
+
+  // ── TITLE WORD visibility ──
+  // Fades in from phase 2 (SPIRAL), peaks at ALGIZ, fades in VOID, returns OTHALA+
+  let titleAlpha = 0;
+  if (phase === 2)      titleAlpha = easeInOut(t) * 0.7;
+  else if (phase === 3) titleAlpha = 0.85;
+  else if (phase === 4) titleAlpha = lerp(0.85, 0.0, easeInOut(t));
+  else if (phase === 5) titleAlpha = easeInOut(t) * 0.6;
+  else if (phase === 6) titleAlpha = lerp(0.6, 0, t);
+
+  const titleGold = `rgba(245,200,66,${titleAlpha})`;
+  title.style.color = titleGold;
+  title.style.textShadow = `
+    0 0 40px rgba(245,200,66,${titleAlpha * 0.6}),
+    0 0 80px rgba(245,200,66,${titleAlpha * 0.3})
+  `;
+
+  // ── SCROLL CUE ──
+  cue.style.opacity = progress < 0.05 ? 1 : Math.max(0, 1 - progress * 15);
+
+  // ── PHASE LABEL ──
+  const names = ['NORMAL','DILATE','SPIRAL','ALGIZ ᛉ','VOID','OTHALA ᛟ','RETURN'];
+  label.textContent = `${names[phase]}  ${(progress * 100).toFixed(0)}%`;
+
+  // ── SCREEN-WIDE COLOUR TINT — subtle only in extreme phases ──
+  if (phase === 4) {
+    // void: slight white wash over whole frame
+    ctx.fillStyle = rgba(WHITE, easeInOut(t) * 0.08);
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+// ── SCROLL HANDLER ──
+function onScroll() {
+  const scrolled = window.scrollY;
+  const total    = ghost.offsetHeight - window.innerHeight;
+  const progress = clamp(scrolled / total, 0, 1);
+  draw(progress);
+}
+
+// ── RAF LOOP for animating spirals/rune pulse ──
+function loop() {
+  loopAngle += 0.018;
+  const scrolled = window.scrollY;
+  const total    = ghost.offsetHeight - window.innerHeight;
+  const progress = clamp(scrolled / total, 0, 1);
+  const { phase } = getPhaseProgress(progress);
+  // only run RAF when animated phases are active
+  if (phase >= 2 && phase <= 5) {
+    draw(progress);
+  }
+  raf = requestAnimationFrame(loop);
+}
+
+window.addEventListener('scroll', onScroll, { passive: true });
+window.addEventListener('resize', () => { resize(); onScroll(); });
+
+// ── INIT ──
+draw(0);
+loop();
+</script>
+</body>
+</html>

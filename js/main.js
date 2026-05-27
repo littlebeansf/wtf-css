@@ -32,6 +32,12 @@ const DEMOS = {
     name: 'Matter → Ghost',
     tech: 'canvas pixel sampling',
     file: 'demos/particles.html'
+  },
+  seidr: {
+    num: '06',
+    name: 'SEIÐR',
+    tech: 'canvas iris + runes',
+    file: 'demos/seidr.html'
   }
 };
 
