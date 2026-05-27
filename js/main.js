@@ -143,39 +143,55 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// WHEEL FORWARDING — send wheel events into the active iframe
-// The canvas-area has overflow:hidden so wheel events never reach the iframe document.
-// We capture them here and re-dispatch into contentWindow.
+// EVENT FORWARDING — pass wheel, mouse and touch into the active iframe
+// The shell's overflow:hidden absorbs these before they reach the iframe document.
+function getIframe() {
+  return document.querySelector('#demoFrame iframe');
+}
+
+// Wheel → forward deltaY
 document.getElementById('canvasArea').addEventListener('wheel', (e) => {
   e.preventDefault();
-  const iframe = document.querySelector('#demoFrame iframe');
-  if (!iframe || !iframe.contentWindow) return;
-  iframe.contentWindow.dispatchEvent(
-    new WheelEvent('wheel', {
-      deltaX: e.deltaX,
-      deltaY: e.deltaY,
-      deltaZ: e.deltaZ,
-      deltaMode: e.deltaMode,
-      bubbles: true,
-      cancelable: true,
-    })
-  );
+  const f = getIframe();
+  if (!f || !f.contentWindow) return;
+  f.contentWindow.dispatchEvent(new WheelEvent('wheel', {
+    deltaX: e.deltaX, deltaY: e.deltaY, deltaZ: e.deltaZ,
+    deltaMode: e.deltaMode, bubbles: true, cancelable: true,
+  }));
 }, { passive: false });
 
-// TOUCH FORWARDING — same for touch scroll on mobile
-let _touchY = 0;
+// Mouse → forward clientX/Y (needed for demos like Liquid Text)
+document.getElementById('canvasArea').addEventListener('mousemove', (e) => {
+  const f = getIframe();
+  if (!f || !f.contentWindow) return;
+  // Adjust coords relative to the iframe's top-left
+  const rect = f.getBoundingClientRect();
+  f.contentWindow.dispatchEvent(new MouseEvent('mousemove', {
+    clientX: e.clientX - rect.left,
+    clientY: e.clientY - rect.top,
+    bubbles: true, cancelable: true,
+  }));
+});
+
+// Touch — forward as mouse for simplicity (TouchEvent constructor is unreliable)
+let _ty = 0;
 document.getElementById('canvasArea').addEventListener('touchstart', (e) => {
-  _touchY = e.touches[0].clientY;
-  const iframe = document.querySelector('#demoFrame iframe');
-  if (iframe && iframe.contentWindow)
-    iframe.contentWindow.dispatchEvent(new TouchEvent('touchstart', { touches: e.touches, bubbles: true }));
+  _ty = e.touches[0].clientY;
+  const f = getIframe();
+  if (!f || !f.contentWindow) return;
+  const rect = f.getBoundingClientRect();
+  f.contentWindow.dispatchEvent(new WheelEvent('wheel', { deltaY: 0, bubbles: true, cancelable: true }));
 }, { passive: true });
 
 document.getElementById('canvasArea').addEventListener('touchmove', (e) => {
   e.preventDefault();
-  const iframe = document.querySelector('#demoFrame iframe');
-  if (iframe && iframe.contentWindow)
-    iframe.contentWindow.dispatchEvent(new TouchEvent('touchmove', { touches: e.touches, bubbles: true, cancelable: true }));
+  const dy = _ty - e.touches[0].clientY;
+  _ty = e.touches[0].clientY;
+  const f = getIframe();
+  if (!f || !f.contentWindow) return;
+  f.contentWindow.dispatchEvent(new WheelEvent('wheel', {
+    deltaY: dy * 2, bubbles: true, cancelable: true,
+  }));
 }, { passive: false });
 
 // INIT — load first demo

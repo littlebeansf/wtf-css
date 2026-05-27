@@ -3,28 +3,18 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>SEIÐR — Viking Shaman Eyes</title>
+<title>SEIÐR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   html, body {
-    width: 100%; height: 100%;
-    background: #080808;
-    overflow: hidden;   /* virtual scroll only — no native scrollbar */
-    font-family: 'Georgia', serif;
-  }
-
-  /* ── STAGE: fixed fullscreen, always visible ── */
-  #stage {
-    position: fixed;
-    inset: 0;
     width: 100%;
     height: 100%;
     overflow: hidden;
+    background: #080808;
   }
 
-  /* ── FACE IMAGE ── */
-  /* object-position center 40% — calibrated so eyes land at 48% viewport height */
+  /* Full-bleed face, fills the whole iframe */
   #face {
     position: absolute;
     inset: 0;
@@ -33,16 +23,29 @@
     object-fit: cover;
     object-position: center 40%;
     display: block;
+    user-select: none;
+    pointer-events: none;
   }
 
-  /* ── EYE CANVAS: transparent overlay, pointer-events off ── */
+  /* Canvas sits on top */
   #eye-canvas {
     position: absolute;
     inset: 0;
     pointer-events: none;
   }
 
-  /* ── TITLE ── */
+  /* Vignette darkens edges */
+  #vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center,
+      transparent 25%,
+      rgba(8,8,8,0.45) 65%,
+      rgba(8,8,8,0.82) 100%);
+    pointer-events: none;
+  }
+
+  /* SEIÐR title */
   #title {
     position: absolute;
     top: 50%;
@@ -52,28 +55,16 @@
     font-family: 'Georgia', 'Times New Roman', serif;
     font-weight: 700;
     letter-spacing: 0.22em;
-    color: rgba(245, 200, 66, 0);
-    text-shadow: 0 0 0 transparent;
+    color: rgba(245,200,66,0);
     pointer-events: none;
     user-select: none;
     white-space: nowrap;
   }
 
-  /* ── VIGNETTE ── */
-  #vignette {
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse at center,
-      transparent 25%,
-      rgba(8,8,8,0.45) 65%,
-      rgba(8,8,8,0.8) 100%);
-    pointer-events: none;
-  }
-
-  /* ── SCROLL CUE ── */
+  /* Scroll cue */
   #scroll-cue {
     position: absolute;
-    bottom: 2.5rem;
+    bottom: 2rem;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -83,162 +74,47 @@
     pointer-events: none;
   }
   #scroll-cue span {
-    font-size: 0.6rem;
-    letter-spacing: 0.35em;
+    font-size: 0.58rem;
+    letter-spacing: 0.38em;
     text-transform: uppercase;
-    color: rgba(232, 160, 32, 0.55);
+    color: rgba(232,160,32,0.55);
     font-family: 'Courier New', monospace;
   }
   #scroll-cue .arrow {
     width: 1px;
-    height: 2.5rem;
+    height: 2.2rem;
     background: linear-gradient(to bottom, rgba(232,160,32,0.55), transparent);
-    animation: pulse-down 1.8s ease-in-out infinite;
+    animation: pulse 1.8s ease-in-out infinite;
   }
-  @keyframes pulse-down {
-    0%, 100% { opacity: 0.35; }
-    50%       { opacity: 1; }
-  }
+  @keyframes pulse { 0%,100%{opacity:.3} 50%{opacity:1} }
 
-  /* ── DEBUG LABEL ── */
+  /* Phase debug label */
   #phase-label {
     position: absolute;
-    bottom: 2.5rem;
+    bottom: 1.8rem;
     right: 1.5rem;
     font-size: 0.55rem;
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: rgba(255,255,255,0.2);
     font-family: 'Courier New', monospace;
-  }
-
-  /* ── LORE SECTION ── */
-  #lore-section {
-    position: relative;
-    background: #0d0a06;
-    padding: 7rem 5rem;
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    gap: 4rem;
-    align-items: start;
-    border-top: 1px solid rgba(232,160,32,0.12);
-  }
-  .lore-col {
-    color: rgba(210,188,145,0.7);
-    font-size: 0.88rem;
-    line-height: 2;
-    font-family: 'Georgia', serif;
-  }
-  .lore-col h3 {
-    font-size: 0.6rem;
-    letter-spacing: 0.4em;
-    text-transform: uppercase;
-    color: rgba(232,160,32,0.45);
-    margin-bottom: 1.4rem;
-    font-family: 'Courier New', monospace;
-  }
-  .lore-center {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1.2rem;
-  }
-  .rune-frame {
-    border: 1px solid rgba(232,160,32,0.25);
-    padding: 1.4rem;
-    background: rgba(232,160,32,0.03);
-  }
-  .rune-caption {
-    font-size: 0.52rem;
-    letter-spacing: 0.35em;
-    text-transform: uppercase;
-    color: rgba(232,160,32,0.35);
-    text-align: center;
-    font-family: 'Courier New', monospace;
-  }
-
-  @media (max-width: 768px) {
-    #lore-section { grid-template-columns: 1fr; padding: 4rem 1.5rem; }
-    .lore-center { order: -1; }
+    pointer-events: none;
   }
 </style>
 </head>
 <body>
 
-<div id="stage">
-    <img id="face" src="../assets/img/shaman_face.png" alt="Viking Seiðr Shaman" />
-    <div id="vignette"></div>
-    <canvas id="eye-canvas"></canvas>
-    <div id="title">SEIÐR</div>
-    <div id="scroll-cue">
-      <span>scroll</span>
-      <div class="arrow"></div>
-    </div>
-    <div id="phase-label"></div>
-  </div>
-
-<!-- ── LORE BELOW FOLD ── -->
-<div id="lore-section">
-  <div class="lore-col">
-    <h3>Seiðr</h3>
-    <p>In Norse cosmology, seiðr was a form of magic practiced by the völva — the wandering shaman-seeress. Through ritual trance induced by sacred plants, drumming, and chant, she could travel between the nine worlds of Yggdrasil and return with visions of fate.</p>
-    <br/>
-    <p>The fly agaric — Amanita muscaria — was known to shamanic cultures across the circumpolar north. Its consumption broke the veil between worlds, burning runes into the retina of the inner eye.</p>
-  </div>
-
-  <div class="lore-center">
-    <div class="rune-frame">
-      <svg width="110" height="110" viewBox="-55 -55 110 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="0" cy="0" r="51" stroke="rgba(232,160,32,0.25)" stroke-width="0.5"/>
-        <g stroke="rgba(232,160,32,0.65)" stroke-width="1.4" stroke-linecap="round">
-          <line x1="0" y1="-7"  x2="0"  y2="-37"/>
-          <line x1="-5" y1="-26" x2="0"  y2="-37"/>
-          <line x1="5" y1="-26" x2="0" y2="-37"/>
-          <line x1="-5" y1="-26" x2="-5" y2="-32"/>
-          <line x1="5" y1="-5"  x2="27" y2="-27"/>
-          <line x1="20" y1="-35" x2="27" y2="-27"/>
-          <line x1="27" y1="-27" x2="27" y2="-20"/>
-          <line x1="7" y1="0"   x2="37" y2="0"/>
-          <line x1="27" y1="-5"  x2="37" y2="0"/>
-          <line x1="27" y1="5" x2="37" y2="0"/>
-          <line x1="25" y1="-5"  x2="25" y2="5"/>
-          <line x1="5" y1="5"   x2="27" y2="27"/>
-          <line x1="27" y1="20" x2="27" y2="27"/>
-          <line x1="20" y1="27" x2="27" y2="27"/>
-          <line x1="0" y1="7"   x2="0"  y2="37"/>
-          <line x1="-6" y1="23"  x2="0"  y2="32"/>
-          <line x1="6" y1="23" x2="0" y2="32"/>
-          <line x1="-5" y1="5"  x2="-27" y2="27"/>
-          <line x1="-27" y1="20" x2="-27" y2="27"/>
-          <line x1="-20" y1="27" x2="-27" y2="27"/>
-          <line x1="-27" y1="20" x2="-22" y2="20"/>
-          <line x1="-7" y1="0"  x2="-37" y2="0"/>
-          <line x1="-27" y1="-5" x2="-37" y2="0"/>
-          <line x1="-27" y1="5" x2="-37" y2="0"/>
-          <line x1="-5" y1="-5" x2="-27" y2="-27"/>
-          <line x1="-27" y1="-20" x2="-27" y2="-27"/>
-          <line x1="-20" y1="-27" x2="-27" y2="-27"/>
-          <line x1="-27" y1="-20" x2="-20" y2="-27"/>
-        </g>
-        <circle cx="0" cy="0" r="2.5" fill="rgba(232,160,32,0.55)"/>
-      </svg>
-    </div>
-    <div class="rune-caption">Vegvísir · Wayfinder</div>
-  </div>
-
-  <div class="lore-col">
-    <h3>Völva</h3>
-    <p>The völva carried a staff (völr) and wore ritual garments adorned with amber, bone runes, and the pelts of animal spirits. She was both feared and revered — capable of seeing the threads of wyrd woven by the Norns beneath Yggdrasil's roots.</p>
-    <br/>
-    <p>When the mushroom opened her inner eye, the runes did not need to be read. They appeared burning behind the retina, carved into the very fabric of sight itself.</p>
-  </div>
-</div>
+<img id="face" src="../assets/img/shaman_face.png" alt="Viking Seiðr Shaman" />
+<div id="vignette"></div>
+<canvas id="eye-canvas"></canvas>
+<div id="title">SEIÐR</div>
+<div id="scroll-cue"><span>scroll</span><div class="arrow"></div></div>
+<div id="phase-label">NORMAL  0%</div>
 
 <script>
 /* ══════════════════════════════════════════════════════
-   SEIÐR — scroll-driven eye possession
-   Calibrated eye positions: L(0.308, 0.484) R(0.684, 0.484)
-   object-position: center 40%
+   SEIÐR — Virtual-scroll eye possession engine
+   No DOM scroll. Pure wheel/touch → virtualProgress.
    ══════════════════════════════════════════════════════ */
 
 const canvas = document.getElementById('eye-canvas');
@@ -247,56 +123,49 @@ const title  = document.getElementById('title');
 const cue    = document.getElementById('scroll-cue');
 const label  = document.getElementById('phase-label');
 
-// ── CALIBRATED EYE POSITIONS (fraction of viewport W/H) ──
+// ── CALIBRATED EYE POSITIONS ──
+// Measured from 1024×1536 portrait at object-position center 40% in 1400×900 viewport
 const EYES = [
-  { xf: 0.308, yf: 0.484 },   // left eye
-  { xf: 0.684, yf: 0.484 },   // right eye
+  { xf: 0.308, yf: 0.484 },
+  { xf: 0.684, yf: 0.484 },
 ];
-// Iris radius as fraction of viewport width
-const IRIS_R_FRAC = 0.067;
+const IRIS_R_FRAC = 0.067;   // iris radius as fraction of viewport width
 
 // ── COLOURS ──
 const C = {
-  amber:  [232, 160, 32],
-  gold:   [245, 200, 66],
-  cyan:   [0,   229, 255],
-  pink:   [255, 45,  120],
-  white:  [255, 255, 255],
-  black:  [4,   2,   0],
+  amber: [232,160, 32],
+  gold:  [245,200, 66],
+  cyan:  [  0,229,255],
+  pink:  [255, 45,120],
+  white: [255,255,255],
+  black: [  4,  2,  0],
 };
-function rgba(col, a) { return `rgba(${col[0]},${col[1]},${col[2]},${a})`; }
+const rgba = (col, a) => `rgba(${col[0]},${col[1]},${col[2]},${a.toFixed(3)})`;
 
-// ── SCROLL PHASES [start, end] as 0–1 fractions of total scroll ──
-// 7 phases over 700vh → each "block" is 100vh
-const P = {
-  NORMAL:  [0.00, 0.10],
-  DILATE:  [0.10, 0.24],
-  SPIRAL:  [0.24, 0.40],
-  ALGIZ:   [0.40, 0.56],
-  VOID:    [0.56, 0.68],
-  OTHALA:  [0.68, 0.82],
-  RETURN:  [0.82, 1.00],
-};
-const PHASE_NAMES = ['NORMAL','DILATE','SPIRAL','ALGIZ ᛉ','VOID','OTHALA ᛟ','RETURN'];
-
-// ── RAF ANGLE (for spiral/pulse animations) ──
-let angle = 0;
-let lastProgress = 0;
+// ── PHASES [start, end] fraction of 0–1 ──
+const PHASES = [
+  { name:'NORMAL',   s:0.00, e:0.10 },
+  { name:'DILATE',   s:0.10, e:0.24 },
+  { name:'SPIRAL',   s:0.24, e:0.40 },
+  { name:'ALGIZ ᛉ',  s:0.40, e:0.56 },
+  { name:'VOID',     s:0.56, e:0.68 },
+  { name:'OTHALA ᛟ', s:0.68, e:0.82 },
+  { name:'RETURN',   s:0.82, e:1.00 },
+];
 
 // ── HELPERS ──
-const lerp   = (a, b, t) => a + (b - a) * t;
-const clamp  = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const ease   = t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+const lerp  = (a,b,t) => a+(b-a)*t;
+const clamp = (v,lo,hi) => Math.max(lo,Math.min(hi,v));
+const ease  = t => t<.5 ? 2*t*t : -1+(4-2*t)*t;
 
 function phaseOf(p) {
-  const keys = Object.keys(P);
-  for (let i = 0; i < keys.length; i++) {
-    const [s, e] = P[keys[i]];
-    if (p >= s && p < e + 0.001) {
-      return { idx: i, t: clamp((p - s) / (e - s), 0, 1) };
+  for (let i=0; i<PHASES.length; i++) {
+    const ph = PHASES[i];
+    if (p >= ph.s && p < ph.e + 0.001) {
+      return { idx:i, t: clamp((p-ph.s)/(ph.e-ph.s), 0, 1) };
     }
   }
-  return { idx: keys.length - 1, t: 1 };
+  return { idx:PHASES.length-1, t:1 };
 }
 
 // ── RESIZE ──
@@ -304,295 +173,198 @@ function resize() {
   canvas.width  = window.innerWidth;
   canvas.height = window.innerHeight;
 }
-window.addEventListener('resize', () => { resize(); render(lastProgress); });
+window.addEventListener('resize', () => { resize(); });
 resize();
 
 // ── DRAW ONE EYE ──
-function drawEye(cx, cy, R, phaseIdx, t) {
+let angle = 0;
+
+function drawEye(cx, cy, R, idx, t) {
   const pupR = R * 0.28;
 
-  // ── ALGIZ ᛉ rune ──
-  function runeAlgiz(alpha, scale = 1) {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.scale(scale, scale);
-    const h = R * 0.72;
-    ctx.strokeStyle = rgba(C.cyan, alpha);
-    ctx.lineWidth = R * 0.10;
-    ctx.lineCap = 'round';
-    ctx.shadowColor = rgba(C.cyan, alpha * 0.9);
-    ctx.shadowBlur = R * 0.7;
+  function runeAlgiz(a) {
+    ctx.save(); ctx.translate(cx,cy);
+    const h = R*0.72;
+    ctx.strokeStyle = rgba(C.cyan, a);
+    ctx.lineWidth = R*0.10; ctx.lineCap='round';
+    ctx.shadowColor = rgba(C.cyan, a*0.9); ctx.shadowBlur = R*0.7;
     ctx.beginPath();
-    ctx.moveTo(0, h); ctx.lineTo(0, -h);           // vertical spine
-    ctx.moveTo(0, -h * 0.05); ctx.lineTo(-h * 0.58, -h * 0.72);  // left arm
-    ctx.moveTo(0, -h * 0.05); ctx.lineTo( h * 0.58, -h * 0.72);  // right arm
-    ctx.stroke();
-    ctx.restore();
+    ctx.moveTo(0,h); ctx.lineTo(0,-h);
+    ctx.moveTo(0,-h*0.05); ctx.lineTo(-h*0.58,-h*0.72);
+    ctx.moveTo(0,-h*0.05); ctx.lineTo( h*0.58,-h*0.72);
+    ctx.stroke(); ctx.restore();
   }
 
-  // ── OTHALA ᛟ rune ──
-  function runeOthala(alpha, scale = 1) {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.scale(scale, scale);
-    const hw = R * 0.50, hh = R * 0.55, legLen = R * 0.22;
-    ctx.strokeStyle = rgba(C.pink, alpha);
-    ctx.lineWidth = R * 0.10;
-    ctx.lineCap = 'round';
-    ctx.shadowColor = rgba(C.pink, alpha * 0.9);
-    ctx.shadowBlur = R * 0.7;
-    // Diamond
+  function runeOthala(a) {
+    ctx.save(); ctx.translate(cx,cy);
+    const hw=R*0.50, hh=R*0.55, leg=R*0.22;
+    ctx.strokeStyle = rgba(C.pink, a);
+    ctx.lineWidth = R*0.10; ctx.lineCap='round';
+    ctx.shadowColor = rgba(C.pink, a*0.9); ctx.shadowBlur = R*0.7;
     ctx.beginPath();
-    ctx.moveTo(0, -hh);
-    ctx.lineTo(hw, 0);
-    ctx.lineTo(0,  hh);
-    ctx.lineTo(-hw, 0);
-    ctx.closePath();
+    ctx.moveTo(0,-hh); ctx.lineTo(hw,0); ctx.lineTo(0,hh); ctx.lineTo(-hw,0); ctx.closePath();
     ctx.stroke();
-    // Two diagonal legs from bottom corners
     ctx.beginPath();
-    ctx.moveTo(-hw * 0.55, hh * 0.42); ctx.lineTo(-hw * 0.55, hh * 0.42 + legLen);
-    ctx.moveTo( hw * 0.55, hh * 0.42); ctx.lineTo( hw * 0.55, hh * 0.42 + legLen);
-    ctx.stroke();
-    ctx.restore();
+    ctx.moveTo(-hw*0.55, hh*0.42); ctx.lineTo(-hw*0.55, hh*0.42+leg);
+    ctx.moveTo( hw*0.55, hh*0.42); ctx.lineTo( hw*0.55, hh*0.42+leg);
+    ctx.stroke(); ctx.restore();
   }
 
-  // ────────────────────────────────
-  if (phaseIdx === 0) {
-    // NORMAL — no overlay at all
-    return;
-  }
+  if (idx === 0) return; // NORMAL — no overlay
 
-  if (phaseIdx === 1) {
-    // DILATE — pupils swell, amber halo rises
+  if (idx === 1) { // DILATE
     const big = ease(t);
-    const bigPupil = lerp(pupR, R * 0.70, big);
-
-    // amber iris glow ring
-    const g1 = ctx.createRadialGradient(cx, cy, bigPupil * 0.9, cx, cy, R);
-    g1.addColorStop(0,   rgba(C.amber, 0));
-    g1.addColorStop(0.4, rgba(C.gold,  big * 0.5));
-    g1.addColorStop(1,   rgba(C.amber, big * 0.25));
-    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2);
-    ctx.fillStyle = g1; ctx.fill();
-
-    // expanding dark pupil
-    ctx.beginPath(); ctx.arc(cx, cy, bigPupil, 0, Math.PI*2);
-    ctx.fillStyle = rgba(C.black, lerp(0.2, 0.9, big));
-    ctx.fill();
+    const bigP = lerp(pupR, R*0.70, big);
+    const g = ctx.createRadialGradient(cx,cy,bigP*0.9, cx,cy,R);
+    g.addColorStop(0, rgba(C.amber,0));
+    g.addColorStop(0.4, rgba(C.gold, big*0.5));
+    g.addColorStop(1, rgba(C.amber, big*0.25));
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx,cy,bigP,0,Math.PI*2);
+    ctx.fillStyle=rgba(C.black, lerp(0.2,0.9,big)); ctx.fill();
     return;
   }
 
-  if (phaseIdx === 2) {
-    // SPIRAL — psychedelic swirl spins
+  if (idx === 2) { // SPIRAL
     const sp = ease(t);
-
-    // darkened pupil (stay dilated)
-    ctx.beginPath(); ctx.arc(cx, cy, R * 0.68, 0, Math.PI*2);
-    ctx.fillStyle = rgba(C.black, 0.72); ctx.fill();
-
-    // clip to iris circle
+    ctx.beginPath(); ctx.arc(cx,cy,R*0.68,0,Math.PI*2);
+    ctx.fillStyle=rgba(C.black,0.72); ctx.fill();
     ctx.save();
-    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.clip();
-
-    // two-arm spiral
-    for (let arm = 0; arm < 2; arm++) {
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.clip();
+    for (let arm=0; arm<2; arm++) {
       ctx.beginPath();
-      const armOff = arm * Math.PI;
-      const turns  = 3.5 + sp * 2;
-      const spin   = angle * (1 + sp * 3);
-      for (let i = 0; i <= 240; i++) {
-        const frac = i / 240;
-        const r = frac * R * 0.66;
-        const a = frac * Math.PI * 2 * turns + spin + armOff;
-        const x = cx + r * Math.cos(a);
-        const y = cy + r * Math.sin(a);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      const turns=3.5+sp*2, spin=angle*(1+sp*3), off=arm*Math.PI;
+      for (let i=0; i<=240; i++) {
+        const f=i/240, r=f*R*0.66, a=f*Math.PI*2*turns+spin+off;
+        const x=cx+r*Math.cos(a), y=cy+r*Math.sin(a);
+        i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
       }
-      ctx.strokeStyle = rgba(arm === 0 ? C.gold : C.amber, sp * 0.85);
-      ctx.lineWidth = R * 0.065;
-      ctx.lineCap = 'round';
-      ctx.shadowColor = rgba(C.gold, sp * 0.5);
-      ctx.shadowBlur = 14;
+      ctx.strokeStyle=rgba(arm===0?C.gold:C.amber, sp*0.85);
+      ctx.lineWidth=R*0.065; ctx.lineCap='round';
+      ctx.shadowColor=rgba(C.gold,sp*0.5); ctx.shadowBlur=14;
       ctx.stroke();
     }
-
-    // outer rim glow
-    const rim = ctx.createRadialGradient(cx, cy, R * 0.55, cx, cy, R);
-    rim.addColorStop(0, rgba(C.gold, 0));
-    rim.addColorStop(1, rgba(C.gold, sp * 0.55));
-    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2);
-    ctx.fillStyle = rim; ctx.fill();
-
-    ctx.restore();
-    return;
+    const rim=ctx.createRadialGradient(cx,cy,R*0.55, cx,cy,R);
+    rim.addColorStop(0,rgba(C.gold,0)); rim.addColorStop(1,rgba(C.gold,sp*0.55));
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fillStyle=rim; ctx.fill();
+    ctx.restore(); return;
   }
 
-  if (phaseIdx === 3) {
-    // ALGIZ — white-gold flood, rune burns in
+  if (idx === 3) { // ALGIZ
     const ap = ease(t);
-
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-    g.addColorStop(0,   rgba(C.gold,  ap * 0.95));
-    g.addColorStop(0.5, rgba(C.white, ap * 0.88));
-    g.addColorStop(1,   rgba(C.cyan,  ap * 0.35));
-    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2);
-    ctx.fillStyle = g; ctx.fill();
-
-    const pulse = 0.65 + 0.35 * Math.sin(angle * 3.2);
-    runeAlgiz(ap * pulse);
-    return;
+    const g=ctx.createRadialGradient(cx,cy,0, cx,cy,R);
+    g.addColorStop(0,rgba(C.gold,ap*0.95));
+    g.addColorStop(0.5,rgba(C.white,ap*0.88));
+    g.addColorStop(1,rgba(C.cyan,ap*0.35));
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+    runeAlgiz(ap*(0.65+0.35*Math.sin(angle*3.2))); return;
   }
 
-  if (phaseIdx === 4) {
-    // VOID — pure white sclera, no iris
+  if (idx === 4) { // VOID
     const vp = ease(t);
-
-    ctx.beginPath(); ctx.arc(cx, cy, R * 1.06, 0, Math.PI*2);
-    ctx.fillStyle = rgba(C.white, vp);
-    ctx.fill();
-
-    // soft glow halo
-    const halo = ctx.createRadialGradient(cx, cy, R * 0.8, cx, cy, R * 1.4);
-    halo.addColorStop(0, rgba(C.white, 0));
-    halo.addColorStop(1, rgba(C.gold,  vp * 0.3));
-    ctx.beginPath(); ctx.arc(cx, cy, R * 1.4, 0, Math.PI*2);
-    ctx.fillStyle = halo; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx,cy,R*1.06,0,Math.PI*2);
+    ctx.fillStyle=rgba(C.white,vp); ctx.fill();
+    const halo=ctx.createRadialGradient(cx,cy,R*0.8, cx,cy,R*1.4);
+    halo.addColorStop(0,rgba(C.white,0)); halo.addColorStop(1,rgba(C.gold,vp*0.3));
+    ctx.beginPath(); ctx.arc(cx,cy,R*1.4,0,Math.PI*2); ctx.fillStyle=halo; ctx.fill();
     return;
   }
 
-  if (phaseIdx === 5) {
-    // OTHALA — amber-pink blaze, Othala rune
+  if (idx === 5) { // OTHALA
     const op = ease(t);
-
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-    g.addColorStop(0,   rgba(C.pink,  op * 0.45));
-    g.addColorStop(0.4, rgba(C.amber, op * 0.92));
-    g.addColorStop(1,   rgba(C.gold,  op * 0.65));
-    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2);
-    ctx.fillStyle = g; ctx.fill();
-
-    // pupil
-    ctx.beginPath(); ctx.arc(cx, cy, pupR, 0, Math.PI*2);
-    ctx.fillStyle = rgba(C.black, op * 0.9); ctx.fill();
-
-    const pulse = 0.6 + 0.4 * Math.sin(angle * 2.8);
-    runeOthala(op * pulse);
-    return;
+    const g=ctx.createRadialGradient(cx,cy,0, cx,cy,R);
+    g.addColorStop(0,rgba(C.pink,op*0.45));
+    g.addColorStop(0.4,rgba(C.amber,op*0.92));
+    g.addColorStop(1,rgba(C.gold,op*0.65));
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx,cy,pupR,0,Math.PI*2);
+    ctx.fillStyle=rgba(C.black,op*0.9); ctx.fill();
+    runeOthala(op*(0.6+0.4*Math.sin(angle*2.8))); return;
   }
 
-  if (phaseIdx === 6) {
-    // RETURN — overlay dissolves back to natural
-    const fade = 1 - ease(t);
+  if (idx === 6) { // RETURN
+    const fade = 1-ease(t);
     if (fade < 0.02) return;
-
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-    g.addColorStop(0,   rgba(C.black, 0));
-    g.addColorStop(0.35, rgba(C.amber, fade * 0.30));
-    g.addColorStop(1,   rgba(C.gold,  fade * 0.20));
-    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2);
-    ctx.fillStyle = g; ctx.fill();
-
-    // reverse fading spiral
+    const g=ctx.createRadialGradient(cx,cy,0, cx,cy,R);
+    g.addColorStop(0,rgba(C.black,0));
+    g.addColorStop(0.35,rgba(C.amber,fade*0.30));
+    g.addColorStop(1,rgba(C.gold,fade*0.20));
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
     ctx.save();
-    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.clip();
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.clip();
     ctx.beginPath();
-    for (let i = 0; i <= 160; i++) {
-      const frac = i / 160;
-      const r = frac * R * 0.6;
-      const a = frac * Math.PI * 2 * 3 - angle * 1.2;
-      const x = cx + r * Math.cos(a);
-      const y = cy + r * Math.sin(a);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    for (let i=0; i<=160; i++) {
+      const f=i/160, r=f*R*0.6, a=f*Math.PI*2*3-angle*1.2;
+      const x=cx+r*Math.cos(a), y=cy+r*Math.sin(a);
+      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
     }
-    ctx.strokeStyle = rgba(C.gold, fade * 0.35);
-    ctx.lineWidth = R * 0.05;
-    ctx.shadowColor = rgba(C.gold, fade * 0.2);
-    ctx.shadowBlur = 8;
-    ctx.stroke();
-    ctx.restore();
-    return;
+    ctx.strokeStyle=rgba(C.gold,fade*0.35); ctx.lineWidth=R*0.05;
+    ctx.shadowColor=rgba(C.gold,fade*0.2); ctx.shadowBlur=8;
+    ctx.stroke(); ctx.restore(); return;
   }
 }
 
-// ── MAIN RENDER FUNCTION ──
-function render(progress) {
-  lastProgress = progress;
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
+// ── RENDER ──
+function render(p) {
+  const W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const R=W*IRIS_R_FRAC;
+  const {idx,t}=phaseOf(p);
+  for (const eye of EYES) drawEye(eye.xf*W, eye.yf*H, R, idx, t);
 
-  const R  = W * IRIS_R_FRAC;
-  const { idx, t } = phaseOf(progress);
+  // title
+  let ta=0;
+  if(idx===2) ta=ease(t)*0.72;
+  else if(idx===3) ta=0.88;
+  else if(idx===4) ta=lerp(0.88,0,ease(t));
+  else if(idx===5) ta=ease(t)*0.65;
+  else if(idx===6) ta=lerp(0.65,0,ease(t));
+  title.style.color=`rgba(245,200,66,${ta})`;
+  title.style.textShadow=ta>0.01
+    ?`0 0 40px rgba(245,200,66,${ta*0.55}),0 0 80px rgba(245,200,66,${ta*0.25})`
+    :'none';
 
-  for (const eye of EYES) {
-    drawEye(eye.xf * W, eye.yf * H, R, idx, t);
-  }
+  // scroll cue
+  cue.style.opacity = p<0.06 ? 1 : Math.max(0,1-p*14);
 
-  // ── TITLE visibility ──
-  let ta = 0;
-  if      (idx === 2) ta = ease(t) * 0.72;
-  else if (idx === 3) ta = 0.88;
-  else if (idx === 4) ta = lerp(0.88, 0, ease(t));
-  else if (idx === 5) ta = ease(t) * 0.65;
-  else if (idx === 6) ta = lerp(0.65, 0, ease(t));
-
-  title.style.color      = `rgba(245,200,66,${ta})`;
-  title.style.textShadow = ta > 0.01
-    ? `0 0 40px rgba(245,200,66,${ta * 0.55}), 0 0 80px rgba(245,200,66,${ta * 0.25})`
-    : 'none';
-
-  // ── SCROLL CUE ──
-  cue.style.opacity = progress < 0.06 ? 1 : Math.max(0, 1 - progress * 14).toFixed(3);
-
-  // ── PHASE DEBUG LABEL ──
-  label.textContent = `${PHASE_NAMES[idx]}  ${(progress * 100).toFixed(0)}%`;
+  // debug label
+  label.textContent=`${PHASES[idx].name}  ${(p*100).toFixed(0)}%`;
 }
 
 // ══════════════════════════════════════════════════
 // VIRTUAL SCROLL ENGINE
-// Works inside iframes, no DOM scroll needed.
-// wheel + touch → virtualProgress (0–1)
-// Smooth lerp → displayProgress → render()
+// wheel + touch → virtualProgress (0–1), no DOM scroll
+// Works inside iframes and standalone
 // ══════════════════════════════════════════════════
 
-const TOTAL_DELTA = 4000;   // total wheel delta units = full journey
-let virtualProgress  = 0;   // raw target  0–1
-let displayProgress  = 0;   // smoothed    0–1
-let touchStartY      = 0;
+const TOTAL_WHEEL = 3200;   // total deltaY units for full journey
+let vp = 0;   // virtual progress target
+let dp = 0;   // display progress (smoothed)
+let ty = 0;   // touch start Y
 
-// ── WHEEL ──
-window.addEventListener('wheel', (e) => {
+window.addEventListener('wheel', e => {
   e.preventDefault();
-  virtualProgress = clamp(virtualProgress + e.deltaY / TOTAL_DELTA, 0, 1);
+  vp = clamp(vp + e.deltaY / TOTAL_WHEEL, 0, 1);
 }, { passive: false });
 
-// ── TOUCH ──
-window.addEventListener('touchstart', (e) => {
-  touchStartY = e.touches[0].clientY;
+window.addEventListener('touchstart', e => {
+  ty = e.touches[0].clientY;
 }, { passive: true });
 
-window.addEventListener('touchmove', (e) => {
+window.addEventListener('touchmove', e => {
   e.preventDefault();
-  const dy = touchStartY - e.touches[0].clientY;
-  touchStartY = e.touches[0].clientY;
-  virtualProgress = clamp(virtualProgress + dy / (TOTAL_DELTA * 0.35), 0, 1);
+  vp = clamp(vp + (ty - e.touches[0].clientY) / (TOTAL_WHEEL * 0.3), 0, 1);
+  ty = e.touches[0].clientY;
 }, { passive: false });
 
-// ── RAF LOOP: lerp display toward virtual, animate spiral/rune pulse ──
+// ── TICK: lerp + render every frame ──
 function tick() {
   angle += 0.02;
-
-  // smooth lerp — faster when far, gentle near target
-  const diff = virtualProgress - displayProgress;
-  displayProgress += diff * 0.09;
-
-  // always render (needed for rune pulse animation even when not scrolling)
-  render(displayProgress);
-
+  dp += (vp - dp) * 0.09;
+  render(dp);
   requestAnimationFrame(tick);
 }
 
-// ── INIT ──
 render(0);
 tick();
 </script>
