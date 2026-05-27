@@ -6,31 +6,31 @@ const DEMOS = {
   eyelid: {
     num: '01',
     name: 'Eye Awakening',
-    tech: 'scroll-driven · clip-path · CSS layering',
+    tech: 'scroll + clip-path',
     file: 'demos/eyelid.html'
   },
   liquid: {
     num: '02',
     name: 'Liquid Text',
-    tech: 'SVG feTurbulence · feDisplacementMap · Canvas metaballs',
+    tech: 'SVG filter + canvas',
     file: 'demos/liquid.html'
   },
   depth: {
     num: '03',
     name: 'False Depth',
-    tech: '3D parallax · CSS preserve-3d · mouse tracking',
+    tech: '3D parallax + mouse',
     file: 'demos/depth.html'
   },
   glitch: {
     num: '04',
     name: 'Signal Decay',
-    tech: 'clip-path slices · CSS @keyframes · Canvas noise',
+    tech: 'clip-path + VHS noise',
     file: 'demos/glitch.html'
   },
   particles: {
     num: '05',
     name: 'Matter → Ghost',
-    tech: 'Canvas 2D · pixel sampling · scroll physics',
+    tech: 'canvas pixel sampling',
     file: 'demos/particles.html'
   }
 };

@@ -195,6 +195,9 @@
   gap: var(--space-3);
   z-index: 10;
   pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: calc(100% - var(--space-16));
 }
 
 .demo-num {
