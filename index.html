@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WTF.css — CSS Experiments by @sfisnotdead</title>
+  <meta name="description" content="A living showcase of insane CSS and browser tricks that make visitors question reality.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%23000'/><text x='4' y='24' font-size='22' fill='%23ff2d78'>?</text></svg>">
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <svg aria-label="WTF.css logo" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="36" height="36">
+        <rect width="48" height="48" rx="8" fill="#ff2d78"/>
+        <text x="5" y="36" font-size="30" font-family="monospace" font-weight="700" fill="#000">?!</text>
+      </svg>
+      <span class="logo-text">WTF.css</span>
+    </div>
+    <p class="sidebar-tagline">Is this even a browser?</p>
+    <ul class="nav-list" role="list">
+      <li>
+        <button class="nav-item active" data-demo="eyelid" onclick="loadDemo('eyelid', this)">
+          <span class="nav-num">01</span>
+          <span class="nav-title">Eye Awakening</span>
+          <span class="nav-tag">scroll</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item" data-demo="liquid" onclick="loadDemo('liquid', this)">
+          <span class="nav-num">02</span>
+          <span class="nav-title">Liquid Text</span>
+          <span class="nav-tag">filter</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item" data-demo="depth" onclick="loadDemo('depth', this)">
+          <span class="nav-num">03</span>
+          <span class="nav-title">False Depth</span>
+          <span class="nav-tag">3d / mouse</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item" data-demo="glitch" onclick="loadDemo('glitch', this)">
+          <span class="nav-num">04</span>
+          <span class="nav-title">Signal Decay</span>
+          <span class="nav-tag">clip-path</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-item" data-demo="particles" onclick="loadDemo('particles', this)">
+          <span class="nav-num">05</span>
+          <span class="nav-title">Matter → Ghost</span>
+          <span class="nav-tag">canvas / scroll</span>
+        </button>
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <span class="footer-text">@sfisnotdead</span>
+    </div>
+  </nav>
+
+  <!-- MOBILE HEADER -->
+  <header class="mobile-header">
+    <button class="hamburger" id="hamburger" aria-label="Open menu" onclick="toggleSidebar()">
+      <span></span><span></span><span></span>
+    </button>
+    <span class="mobile-title">WTF.css</span>
+  </header>
+
+  <!-- MAIN CANVAS -->
+  <main class="canvas-area" id="canvasArea">
+    <div class="demo-label" id="demoLabel">
+      <span class="demo-num" id="labelNum">01</span>
+      <span class="demo-name" id="labelName">Eye Awakening</span>
+      <span class="demo-tech" id="labelTech">scroll-driven · clip-path · CSS only</span>
+    </div>
+
+    <!-- DEMO FRAME -->
+    <div class="demo-frame" id="demoFrame">
+      <!-- Demos are loaded here via JS -->
+    </div>
+  </main>
+
+  <!-- SIDEBAR OVERLAY (mobile) -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+  <script src="js/main.js"></script>
+</body>
+</html>

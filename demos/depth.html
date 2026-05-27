@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>False Depth</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #050508;
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'Space Grotesk', sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    perspective: 600px;
+    perspective-origin: 50% 50%;
+  }
+
+  /* THE ILLUSION: Multiple text layers at different Z depths */
+  /* Mouse movement shifts each layer by a different amount → 3D parallax */
+
+  .scene {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    transform-style: preserve-3d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* BACKGROUND GRID */
+  .grid {
+    position: absolute;
+    inset: -20%;
+    background-image:
+      linear-gradient(rgba(255,45,120,0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,45,120,0.07) 1px, transparent 1px);
+    background-size: 60px 60px;
+    transform: rotateX(60deg) translateZ(-200px) scale(3);
+    transform-origin: center bottom;
+    pointer-events: none;
+    transition: transform 0.05s linear;
+  }
+
+  /* LAYER SYSTEM */
+  .layer {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    will-change: transform;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* LAYER 1 — farthest back, most blur */
+  .layer-1 {
+    font-size: clamp(6rem, 20vw, 22rem);
+    font-weight: 700;
+    color: rgba(255,45,120,0.08);
+    letter-spacing: -0.05em;
+    filter: blur(12px);
+    z-index: 1;
+  }
+
+  /* LAYER 2 */
+  .layer-2 {
+    font-size: clamp(5rem, 17vw, 18rem);
+    font-weight: 700;
+    color: rgba(255,45,120,0.15);
+    letter-spacing: -0.05em;
+    filter: blur(5px);
+    z-index: 2;
+  }
+
+  /* LAYER 3 */
+  .layer-3 {
+    font-size: clamp(4rem, 14vw, 15rem);
+    font-weight: 700;
+    color: rgba(255,45,120,0.35);
+    letter-spacing: -0.05em;
+    filter: blur(1.5px);
+    z-index: 3;
+  }
+
+  /* LAYER 4 — sharpest, in focus */
+  .layer-4 {
+    font-size: clamp(3.5rem, 12vw, 13rem);
+    font-weight: 700;
+    letter-spacing: -0.05em;
+    color: transparent;
+    -webkit-text-stroke: 1.5px rgba(255,45,120,0.9);
+    z-index: 4;
+  }
+
+  /* LAYER 5 — closest, glitch offset */
+  .layer-5 {
+    font-size: clamp(3.5rem, 12vw, 13rem);
+    font-weight: 700;
+    letter-spacing: -0.05em;
+    color: rgba(0,229,255,0.4);
+    z-index: 5;
+    mix-blend-mode: screen;
+    transform: translate(3px, -2px);
+  }
+
+  /* FLOATING PARTICLES */
+  .particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+
+  .particle {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    border-radius: 50%;
+    background: rgba(255,45,120,0.6);
+    animation: float-particle linear infinite;
+  }
+
+  @keyframes float-particle {
+    0% { transform: translateY(110vh) scale(0); opacity: 0; }
+    5% { opacity: 1; transform: translateY(100vh) scale(1); }
+    95% { opacity: 1; }
+    100% { transform: translateY(-10vh) scale(0.5); opacity: 0; }
+  }
+
+  /* INSTRUCTION */
+  .instruction {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.25);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    pointer-events: none;
+    text-align: center;
+  }
+
+  /* DEPTH INDICATOR */
+  .depth-indicator {
+    position: fixed;
+    left: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+  }
+
+  .depth-layer-dot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: rgba(255,45,120,0.4);
+  }
+
+  .depth-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,45,120,0.4);
+  }
+
+  .depth-layer-dot:last-child .depth-dot { background: #ff2d78; }
+  .depth-layer-dot:last-child { color: rgba(255,45,120,0.9); }
+
+  .technique-badge {
+    position: fixed;
+    top: 70px;
+    right: 24px;
+    background: rgba(0,0,0,0.8);
+    border: 1px solid rgba(255,45,120,0.3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,45,120,0.8);
+    pointer-events: none;
+    line-height: 1.8;
+    backdrop-filter: blur(10px);
+    max-width: 200px;
+  }
+
+  .technique-badge strong {
+    color: #ff2d78;
+    display: block;
+    margin-bottom: 4px;
+  }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Space+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="scene" id="scene">
+  <div class="grid" id="grid"></div>
+
+  <div class="particles" id="particlesContainer"></div>
+
+  <div class="layer layer-1" id="l1">DEPTH</div>
+  <div class="layer layer-2" id="l2">DEPTH</div>
+  <div class="layer layer-3" id="l3">DEPTH</div>
+  <div class="layer layer-4" id="l4">DEPTH</div>
+  <div class="layer layer-5" id="l5">DEPTH</div>
+</div>
+
+<div class="depth-indicator">
+  <div class="depth-layer-dot"><div class="depth-dot" style="opacity:0.2"></div><span>Z -400</span></div>
+  <div class="depth-layer-dot"><div class="depth-dot" style="opacity:0.35"></div><span>Z -250</span></div>
+  <div class="depth-layer-dot"><div class="depth-dot" style="opacity:0.55"></div><span>Z -100</span></div>
+  <div class="depth-layer-dot"><div class="depth-dot"></div><span>Z 0</span></div>
+  <div class="depth-layer-dot"><div class="depth-dot"></div><span>Z +100</span></div>
+</div>
+
+<div class="instruction">move mouse · tilt your screen · question reality</div>
+
+<div class="technique-badge">
+  <strong>How it works</strong>
+  5 text layers at<br>
+  different Z offsets<br>
+  Mouse → translate<br>
+  Blur = depth cue<br>
+  No WebGL, pure CSS
+</div>
+
+<script>
+const layers = [
+  { el: document.getElementById('l1'), depth: -0.06 },
+  { el: document.getElementById('l2'), depth: -0.04 },
+  { el: document.getElementById('l3'), depth: -0.02 },
+  { el: document.getElementById('l4'), depth: 0 },
+  { el: document.getElementById('l5'), depth: 0.03 },
+];
+const grid = document.getElementById('grid');
+
+let targetX = 0, targetY = 0;
+let currentX = 0, currentY = 0;
+
+window.addEventListener('mousemove', e => {
+  targetX = (e.clientX / window.innerWidth - 0.5) * 2;  // -1 to 1
+  targetY = (e.clientY / window.innerHeight - 0.5) * 2;
+});
+
+// Gyroscope for mobile
+if (window.DeviceOrientationEvent) {
+  window.addEventListener('deviceorientation', e => {
+    targetX = clamp(e.gamma / 45, -1, 1);
+    targetY = clamp(e.beta / 45, -1, 1);
+  });
+}
+
+function clamp(v, mn, mx) { return Math.min(Math.max(v, mn), mx); }
+
+const STRENGTH = 55;
+const GRID_STRENGTH = 20;
+
+function animate() {
+  currentX += (targetX - currentX) * 0.06;
+  currentY += (targetY - currentY) * 0.06;
+
+  layers.forEach(({ el, depth }) => {
+    const tx = currentX * STRENGTH * (depth === 0 ? 0 : 1 / Math.abs(depth || 0.001) * 0.001 + depth * 2);
+    const ty = currentY * STRENGTH * (depth === 0 ? 0 : 1 / Math.abs(depth || 0.001) * 0.001 + depth * 2);
+
+    // Simpler: just multiply depth by a fixed multiplier
+    const mx = currentX * (depth + 0.07) * STRENGTH * 1.5;
+    const my = currentY * (depth + 0.07) * STRENGTH * 1.5;
+    el.style.transform = `translate(${mx}px, ${my}px)`;
+  });
+
+  // Grid moves in opposite direction (ground plane illusion)
+  grid.style.transform = `rotateX(60deg) translateZ(-200px) scale(3) translateX(${currentX * GRID_STRENGTH}px)`;
+
+  requestAnimationFrame(animate);
+}
+animate();
+
+// SPAWN PARTICLES
+const container = document.getElementById('particlesContainer');
+function spawnParticle() {
+  const p = document.createElement('div');
+  p.className = 'particle';
+  p.style.left = Math.random() * 100 + '%';
+  p.style.width = p.style.height = (Math.random() * 3 + 1) + 'px';
+  const duration = Math.random() * 8 + 6;
+  p.style.animationDuration = duration + 's';
+  p.style.animationDelay = -Math.random() * duration + 's';
+  p.style.background = Math.random() < 0.5 ? 'rgba(255,45,120,0.6)' : 'rgba(0,229,255,0.5)';
+  container.appendChild(p);
+  setTimeout(() => p.remove(), duration * 1000 + 500);
+}
+
+for (let i = 0; i < 40; i++) spawnParticle();
+setInterval(spawnParticle, 400);
+</script>
+</body>
+</html>

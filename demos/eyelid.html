@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eye Awakening</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #000;
+    height: 500vh; /* tall scrollable page */
+    font-family: 'Space Grotesk', sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* STICKY CONTAINER — viewport-locked face */
+  .stage {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* FACE — static background layer */
+  .face {
+    position: absolute;
+    inset: 0;
+    background-image: url('../assets/img/face_eyes_open.png');
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
+  }
+
+  /* EYELIDS — clip-path animated by scroll */
+  .eyelid-top {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    background-image: url('../assets/img/face_eyes_closed.png');
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
+    height: 100vh;
+
+    /* This clip-path reveals ONLY the top lid area */
+    clip-path: inset(0 0 var(--reveal) 0);
+    --reveal: 50%; /* controlled by JS */
+  }
+
+  /* SCROLL HINT */
+  .hint {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255,255,255,0.5);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    pointer-events: none;
+    transition: opacity 0.5s;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .hint.hidden {
+    opacity: 0;
+  }
+
+  .hint-arrow {
+    width: 1px;
+    height: 36px;
+    background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.4));
+    animation: pulse-arrow 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse-arrow {
+    0%, 100% { opacity: 0.3; transform: scaleY(1); }
+    50% { opacity: 1; transform: scaleY(1.2); }
+  }
+
+  /* PROGRESS OVERLAY TEXT */
+  .progress-text {
+    position: fixed;
+    bottom: 32px;
+    right: 40px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,45,120,0.6);
+    letter-spacing: 0.1em;
+    pointer-events: none;
+  }
+
+  /* GLOW EFFECT on open */
+  .face-glow {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 60% 30% at 50% 36%,
+      rgba(255,45,120,0.18) 0%,
+      rgba(0,229,255,0.08) 40%,
+      transparent 70%);
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+  }
+
+  /* CAPTION */
+  .caption {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+
+  .caption h2 {
+    font-size: clamp(2rem, 5vw, 5rem);
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.03em;
+    text-shadow: 0 0 40px rgba(255,45,120,0.8), 0 0 80px rgba(255,45,120,0.4);
+    line-height: 1;
+  }
+
+  .caption p {
+    margin-top: 12px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* TECHNIQUE BADGE */
+  .technique-badge {
+    position: fixed;
+    top: 70px;
+    right: 24px;
+    background: rgba(0,0,0,0.8);
+    border: 1px solid rgba(255,45,120,0.3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,45,120,0.8);
+    pointer-events: none;
+    line-height: 1.8;
+    backdrop-filter: blur(10px);
+    max-width: 200px;
+  }
+
+  .technique-badge strong {
+    color: #ff2d78;
+    display: block;
+    margin-bottom: 4px;
+  }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Space+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <div class="face" id="faceOpen"></div>
+  <div class="eyelid-top" id="eyelidTop"></div>
+  <div class="face-glow" id="faceGlow"></div>
+</div>
+
+<div class="hint" id="hint">
+  <span>scroll to open</span>
+  <div class="hint-arrow"></div>
+</div>
+
+<div class="progress-text" id="progressText">0%</div>
+
+<div class="caption" id="caption">
+  <h2>She sees you.</h2>
+  <p>pure css · no video · no canvas</p>
+</div>
+
+<div class="technique-badge">
+  <strong>How it works</strong>
+  clip-path: inset()<br>
+  background-image layering<br>
+  scroll progress → CSS var<br>
+  sticky positioning
+</div>
+
+<script>
+  const eyelid = document.getElementById('eyelidTop');
+  const glow = document.getElementById('faceGlow');
+  const hint = document.getElementById('hint');
+  const caption = document.getElementById('caption');
+  const progressText = document.getElementById('progressText');
+
+  const SCROLL_RANGE = window.innerHeight * 3; // scroll distance for full open
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function clamp(v, mn, mx) { return Math.min(Math.max(v, mn), mx); }
+  function easeInOut(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+
+  let lastScroll = 0;
+  let raf = null;
+
+  function update() {
+    const scrollY = window.scrollY;
+    const progress = clamp(scrollY / SCROLL_RANGE, 0, 1);
+    const eased = easeInOut(progress);
+
+    // Eyelid clip: starts at inset(0 0 50% 0) fully closed top
+    // As we scroll, bottom inset grows from 50% to 100% = eyelid lifts
+    const bottomInset = lerp(50, 100, eased);
+    eyelid.style.clipPath = `inset(0 0 ${bottomInset}% 0)`;
+
+    // Glow appears as eyes open
+    const glowOpacity = clamp((eased - 0.5) * 2, 0, 1);
+    glow.style.opacity = glowOpacity;
+
+    // Hint fades out early
+    hint.classList.toggle('hidden', progress > 0.05);
+
+    // Caption appears when fully open
+    const captionOpacity = clamp((eased - 0.85) * 6, 0, 1);
+    caption.style.opacity = captionOpacity;
+
+    // Progress
+    progressText.textContent = Math.round(progress * 100) + '%';
+
+    lastScroll = scrollY;
+    raf = null;
+  }
+
+  window.addEventListener('scroll', () => {
+    if (!raf) raf = requestAnimationFrame(update);
+  }, { passive: true });
+
+  update();
+</script>
+</body>
+</html>
