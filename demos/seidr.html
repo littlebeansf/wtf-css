@@ -14,30 +14,43 @@
     background: #000;
   }
 
-  /* ── STAGE ── */
   #stage {
     position: absolute;
     inset: 0;
+    /* Clip so scale corrections don't bleed outside */
+    overflow: hidden;
   }
 
-  /* Each frame is absolute, full-bleed, opacity-controlled by JS */
+  /* Each frame sits full-bleed, opacity + alignment corrected */
   .frame {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: center 28%;
+    /* Anchor object-fit to the pupil midpoint.
+       Pupils are at ~49% horizontally, ~30% vertically in 1023×1537 */
+    object-position: 49% 30%;
     opacity: 0;
-    will-change: opacity;
-    transition: none;
-    transform: scale(1.0);
+    will-change: opacity, transform, filter;
+    /* transform-origin centered on the pupils */
+    transform-origin: 49% 30%;
   }
 
-  /* F1 (closed eyes) starts visible */
-  #f1 { opacity: 1; }
+  /* Per-frame alignment corrections (pupil-lock)
+     Values from pixel analysis — shift each frame so its pupil
+     midpoint matches f1's reference position (502.5, 459.0) */
+  #f1 { opacity: 1; transform: translate(  0.00%,  0.00%); }
+  #f2 {             transform: translate( -0.29%, -0.26%) scale(0.9922); }
+  #f3 {             transform: translate( -0.10%,  0.03%); }
+  #f4 {             transform: translate( -0.73%, -2.28%) scale(0.9494); }
+  #f5 {             transform: translate( -0.29%, -0.65%) scale(0.9845); }
+  #f6 {             transform: translate( -0.39%, -1.24%) scale(0.9694); }
+  #f7 {             transform: translate( -0.44%, -0.52%) scale(0.9864); }
+  #f8 {             transform:  translate( 0.05%, -0.62%) scale(0.9941); }
+  #f9 {             transform: translate( -0.20%, -0.13%) scale(1.0080); }
 
-  /* ── TITLE OVERLAY ── */
+  /* ── TITLE ── */
   #title {
     position: absolute;
     top: 50%;
@@ -48,13 +61,11 @@
     font-weight: 400;
     letter-spacing: 0.28em;
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0);
+    color: rgba(255,255,255,0);
     text-align: center;
     white-space: nowrap;
     pointer-events: none;
     user-select: none;
-    text-shadow: none;
-    mix-blend-mode: screen;
   }
 
   /* ── SUBTITLE ── */
@@ -67,7 +78,7 @@
     font-size: clamp(0.5rem, 1.1vw, 0.8rem);
     letter-spacing: 0.45em;
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0);
+    color: rgba(255,255,255,0);
     white-space: nowrap;
     pointer-events: none;
     user-select: none;
@@ -85,8 +96,6 @@
     align-items: center;
     gap: 0.5rem;
     pointer-events: none;
-    opacity: 1;
-    transition: opacity 0.6s ease;
   }
   #scroll-cue span {
     font-size: 0.55rem;
@@ -103,7 +112,6 @@
   }
   @keyframes pulse { 0%,100%{opacity:0.2} 50%{opacity:0.8} }
 
-  /* ── DEBUG ── */
   #dbg {
     position: absolute;
     bottom: 1.5rem;
@@ -120,7 +128,6 @@
 <body>
 
 <div id="stage">
-  <!-- 9 image frames — scroll crossfades between them -->
   <img id="f1" class="frame" src="../assets/img/seidr_f1.png" alt="" draggable="false" />
   <img id="f2" class="frame" src="../assets/img/seidr_f2.png" alt="" draggable="false" />
   <img id="f3" class="frame" src="../assets/img/seidr_f3.png" alt="" draggable="false" />
@@ -138,148 +145,145 @@
 <div id="dbg">—</div>
 
 <script>
-/* ════════════════════════════════════════════════════
-   SEIÐR — 9-frame scroll-driven image crossfade
-   ════════════════════════════════════════════════════
-   Arc (9 frames, 8 transitions):
-   f1  p=0.00      — eyes closed (start)
-   f2  p=0.05→0.15 — barely open / thin amber slit
-   f3  p=0.18→0.28 — half open
-   f4  p=0.32→0.42 — fully open, calm amber
-   f5  p=0.46→0.54 — amber glowing intensely
-   f6  p=0.57→0.65 — crimson rune irises
-   f7  p=0.68→0.75 — white-gold void peak
-   f8  p=0.78→0.86 — dimming, amber returning
-   f9  p=0.90→0.98 — eyes closing (end)
-   ════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   SEIÐR — pupil-locked 9-frame scroll crossfade
+
+   Key technique:
+   • Each <img> has a CSS transform that corrects its pupil
+     position to match frame 1's reference pixel coordinate.
+   • During a crossfade the outgoing frame gets a mild blur
+     that peaks at the midpoint then clears — this masks the
+     residual micro-difference and reads as a supernatural
+     glow transition rather than a hard cut.
+   ═══════════════════════════════════════════════════════ */
 
 const FRAMES = [f1,f2,f3,f4,f5,f6,f7,f8,f9];
 const NAMES  = ['CLOSED','OPENING','HALF-OPEN','AWAKE','IGNITE','CRIMSON','VOID','DIMMING','CLOSING'];
+
 const title    = document.getElementById('title');
 const subtitle = document.getElementById('subtitle');
 const cue      = document.getElementById('scroll-cue');
 const dbg      = document.getElementById('dbg');
 
-// Pre-decode all frames
+// Pre-load all images
 FRAMES.forEach(img => img.decode && img.decode().catch(() => {}));
 
-// ── CROSSFADE SCHEDULE ──
-// Each entry: { hold_start, xfade_start, xfade_end, hold_end }
-// Frame i is fully visible during [hold_start → xfade_start],
-// crossfades into frame i+1 during [xfade_start → xfade_end],
-// and is gone by xfade_end.
-// Frame i+1 fades in from xfade_start → xfade_end.
-
+/* ── CROSSFADE SCHEDULE ────────────────────────────────
+   Arc (9 frames, 8 transitions). Each entry is for frame i:
+   { xs: xfade_start, xe: xfade_end }
+   Frame i is fully visible from previous xe → xs,
+   crossfades out xs → xe (while frame i+1 fades in).
+   ───────────────────────────────────────────────────── */
 const SCHEDULE = [
-  // f1: hold 0→0.05, fade out 0.05→0.15
-  { hs: 0.00, xs: 0.05, xe: 0.15 },
-  // f2: fade in 0.05→0.15, hold 0.15→0.18, fade out 0.18→0.28
-  { hs: 0.15, xs: 0.18, xe: 0.28 },
-  // f3: fade in 0.18→0.28, hold 0.28→0.32, fade out 0.32→0.42
-  { hs: 0.28, xs: 0.32, xe: 0.42 },
-  // f4: fade in 0.32→0.42, hold 0.42→0.46, fade out 0.46→0.54
-  { hs: 0.42, xs: 0.46, xe: 0.54 },
-  // f5: fade in 0.46→0.54, hold 0.54→0.57, fade out 0.57→0.65
-  { hs: 0.54, xs: 0.57, xe: 0.65 },
-  // f6: fade in 0.57→0.65, hold 0.65→0.68, fade out 0.68→0.75
-  { hs: 0.65, xs: 0.68, xe: 0.75 },
-  // f7: fade in 0.68→0.75, hold 0.75→0.78, fade out 0.78→0.86
-  { hs: 0.75, xs: 0.78, xe: 0.86 },
-  // f8: fade in 0.78→0.86, hold 0.86→0.90, fade out 0.90→0.98
-  { hs: 0.86, xs: 0.90, xe: 0.98 },
-  // f9: fade in 0.90→0.98, hold 0.98→1.0
-  { hs: 0.98, xs: 1.00, xe: 1.00 },
+  { xs: 0.05,  xe: 0.14 },  // f1 → f2
+  { xs: 0.18,  xe: 0.27 },  // f2 → f3
+  { xs: 0.31,  xe: 0.41 },  // f3 → f4
+  { xs: 0.45,  xe: 0.53 },  // f4 → f5
+  { xs: 0.56,  xe: 0.63 },  // f5 → f6
+  { xs: 0.66,  xe: 0.73 },  // f6 → f7
+  { xs: 0.76,  xe: 0.83 },  // f7 → f8
+  { xs: 0.87,  xe: 0.95 },  // f8 → f9
+  { xs: 1.00,  xe: 1.00 },  // f9 — final hold
 ];
 
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const norm  = (v, lo, hi) => lo >= hi ? 1 : clamp((v - lo) / (hi - lo), 0, 1);
-const ease  = t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+const clamp  = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const norm   = (v, lo, hi) => lo >= hi ? 1 : clamp((v - lo) / (hi - lo), 0, 1);
+const ease   = t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+// Smooth-step (used for blur bell curve)
+const smooth = t => t * t * (3 - 2 * t);
 
-function computeOpacity(i, p) {
-  const s = SCHEDULE[i];
+function frameOpacity(i, p) {
   if (i === 0) {
-    // First frame: full until xs, then fades out
+    const s = SCHEDULE[0];
     if (p < s.xs) return 1;
-    if (p < s.xe) return 1 - norm(p, s.xs, s.xe);
+    if (p < s.xe) return ease(1 - norm(p, s.xs, s.xe));
     return 0;
   }
   if (i === FRAMES.length - 1) {
-    // Last frame: fades in from prev xe, holds forever
-    const prev = SCHEDULE[i-1];
+    const prev = SCHEDULE[i - 1];
     if (p < prev.xs) return 0;
-    if (p < prev.xe) return norm(p, prev.xs, prev.xe);
+    if (p < prev.xe) return ease(norm(p, prev.xs, prev.xe));
     return 1;
   }
-  // Middle frames: fade in from prev transition, hold, fade out
-  const prev = SCHEDULE[i-1];
-  const fadeIn  = norm(p, prev.xs, prev.xe);
-  const hold    = p >= s.xs ? 1 : 1;   // already faded in
-  const fadeOut = p > s.xs ? 1 - norm(p, s.xs, s.xe) : 1;
-
-  if (p < prev.xs)  return 0;
-  if (p < prev.xe)  return ease(norm(p, prev.xs, prev.xe));
-  if (p < s.xs)     return 1;
-  if (p < s.xe)     return ease(1 - norm(p, s.xs, s.xe));
+  const prev = SCHEDULE[i - 1];
+  const curr = SCHEDULE[i];
+  if (p < prev.xs) return 0;
+  if (p < prev.xe) return ease(norm(p, prev.xs, prev.xe));  // fading in
+  if (p < curr.xs) return 1;                                 // hold
+  if (p < curr.xe) return ease(1 - norm(p, curr.xs, curr.xe)); // fading out
   return 0;
+}
+
+/* ── BLUR TRANSITION ──────────────────────────────────
+   During each crossfade window, the OUTGOING frame gets
+   a radial blur that peaks at the midpoint (t=0.5).
+   This smooths the perceived discontinuity between images.
+   Max blur: 6px — just enough to blend, not lose detail.
+   ──────────────────────────────────────────────────── */
+const MAX_BLUR = 5; // px
+
+function frameBlur(i, p) {
+  // Each frame is blurred on the way OUT (during its exit xfade)
+  const curr = SCHEDULE[i];
+  if (curr.xs >= curr.xe) return 0;
+  if (p < curr.xs || p > curr.xe) return 0;
+  const t = norm(p, curr.xs, curr.xe);
+  // Bell curve: 0→1→0 peaking at t=0.5
+  const bell = smooth(t < 0.5 ? t * 2 : (1 - t) * 2);
+  return MAX_BLUR * bell;
 }
 
 // ── RENDER ──
 function render(p) {
-  // Compute opacities for all 9 frames
   for (let i = 0; i < FRAMES.length; i++) {
-    const op = computeOpacity(i, p);
+    const op = frameOpacity(i, p);
+    const bl = frameBlur(i, p);
     FRAMES[i].style.opacity = op.toFixed(4);
+    FRAMES[i].style.filter  = bl > 0.1 ? `blur(${bl.toFixed(2)}px)` : 'none';
   }
 
-  // Subtle scale: f7 (void) gets slight zoom at peak
-  const f7op = computeOpacity(6, p);
-  f7.style.transform = `scale(${1 + f7op * 0.04})`;
+  // Subtle zoom on f7 (void) peak
+  const f7op = frameOpacity(6, p);
+  f7.style.transform = `translate(-0.44%, -0.52%) scale(${(0.9864 + f7op * 0.04).toFixed(4)})`;
 
   // ── TITLE ──
-  // Appears gently as eyes open (p≈0.3), peaks during glow phases,
-  // turns crimson at f6, white-gold at f7, fades as eyes close
   let ta = 0;
-  if (p > 0.28 && p < 0.94) {
-    const inT  = ease(clamp((p - 0.28) / 0.14, 0, 1));
-    const outT = p > 0.86 ? ease(clamp(1 - (p - 0.86) / 0.08, 0, 1)) : 1;
+  if (p > 0.30 && p < 0.97) {
+    const inT  = ease(clamp((p - 0.30) / 0.12, 0, 1));
+    const outT = p > 0.88 ? ease(clamp(1 - (p - 0.88) / 0.09, 0, 1)) : 1;
     ta = inT * outT;
   }
 
-  // Color transitions: white → amber (f5) → red (f6) → white-gold (f7) → amber (f8) → white
-  const f5op = computeOpacity(4, p);
-  const f6op = computeOpacity(5, p);
-  const f7op2 = computeOpacity(6, p);
-  const f8op = computeOpacity(7, p);
+  const f5op = frameOpacity(4, p);
+  const f6op = frameOpacity(5, p);
+  const f7op2 = frameOpacity(6, p);
 
   const r = 255;
-  const g = Math.round(255 - f6op * 180 - f5op * 40 + f7op2 * 30);
-  const b = Math.round(255 - f5op * 200 - f6op * 240 - f7op2 * 100 + f8op * 100);
+  const g = Math.round(clamp(255 - f6op * 200 - f5op * 50 + f7op2 * 60, 0, 255));
+  const b = Math.round(clamp(255 - f5op * 210 - f6op * 255 - f7op2 * 80, 20, 255));
 
-  title.style.color = `rgba(${r},${clamp(g,0,255)},${clamp(b,20,255)},${ta.toFixed(3)})`;
+  title.style.color = `rgba(${r},${g},${b},${ta.toFixed(3)})`;
 
-  const glowA  = (f5op * 0.5 + f6op * 0.7 + f7op2 * 0.9) * ta;
-  const glowR  = Math.round(255 * (f6op > 0.3 ? 0.5 : 1));
-  const glowG2 = Math.round(f7op2 * 150);
+  const glowA = (f5op * 0.4 + f6op * 0.7 + f7op2 * 0.9) * ta;
+  const glowR = f6op > 0.3 ? 160 : 255;
+  const glowG = Math.round(f7op2 * 120 + f5op * 80);
   title.style.textShadow = glowA > 0.05
-    ? `0 0 50px rgba(${glowR},${glowG2},0,${glowA.toFixed(3)}), 0 0 120px rgba(${glowR},0,0,${(glowA*0.4).toFixed(3)})`
+    ? `0 0 50px rgba(${glowR},${glowG},0,${glowA.toFixed(3)}), 0 0 130px rgba(${glowR},0,0,${(glowA * 0.4).toFixed(3)})`
     : 'none';
 
-  // Subtitle
   subtitle.style.color = `rgba(255,255,255,${(ta * 0.4).toFixed(3)})`;
-
-  // Scroll cue: fade out once scrolling begins
   cue.style.opacity = p < 0.03 ? 1 : Math.max(0, 1 - (p - 0.03) * 25).toFixed(3);
 
   // Debug
-  const ops = FRAMES.map((_, i) => computeOpacity(i, p));
+  const ops = FRAMES.map((_, i) => frameOpacity(i, p));
   const dom = ops.indexOf(Math.max(...ops));
-  dbg.textContent = `${NAMES[dom]}  ${(p*100).toFixed(0)}%`;
+  dbg.textContent = `${NAMES[dom]}  ${(p * 100).toFixed(0)}%`;
 }
 
 // ── VIRTUAL WHEEL ENGINE ──
-const TOTAL_WHEEL = 4000; // slightly longer feel for 9 frames
-let vp = 0;   // target progress
-let dp = 0;   // displayed progress (lerped)
+const TOTAL_WHEEL = 4000;
+let vp = 0;
+let dp = 0;
 
 window.addEventListener('wheel', e => {
   e.preventDefault();
@@ -287,10 +291,7 @@ window.addEventListener('wheel', e => {
 }, { passive: false });
 
 let _ty = 0;
-window.addEventListener('touchstart', e => {
-  _ty = e.touches[0].clientY;
-}, { passive: true });
-
+window.addEventListener('touchstart', e => { _ty = e.touches[0].clientY; }, { passive: true });
 window.addEventListener('touchmove', e => {
   e.preventDefault();
   const dy = _ty - e.touches[0].clientY;
@@ -298,9 +299,8 @@ window.addEventListener('touchmove', e => {
   vp = Math.max(0, Math.min(1, vp + dy / (TOTAL_WHEEL * 0.28)));
 }, { passive: false });
 
-// ── TICK ──
 function tick() {
-  dp += (vp - dp) * 0.06;  // slightly slower lerp = smoother transitions
+  dp += (vp - dp) * 0.06;
   render(dp);
   requestAnimationFrame(tick);
 }
