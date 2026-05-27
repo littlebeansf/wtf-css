@@ -6,7 +6,7 @@ const DEMOS = {
   seidr: {
     num: '01',
     name: 'SEIÐR',
-    tech: 'canvas iris + runes',
+    tech: 'iris + runes',
     file: 'demos/seidr.html'
   },
   liquid: {

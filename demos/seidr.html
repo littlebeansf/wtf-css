@@ -20,23 +20,22 @@
     inset: 0;
   }
 
-  /* Each frame is absolute, full-bleed, opacity-controlled */
+  /* Each frame is absolute, full-bleed, opacity-controlled by JS */
   .frame {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: center 30%;
+    object-position: center 28%;
     opacity: 0;
     will-change: opacity;
-    /* Slight zoom on mid-journey frames for pull-in effect */
-    transform: scale(1.04);
-    transition: none; /* JS controls this */
+    transition: none;
+    transform: scale(1.0);
   }
 
-  /* F1 starts visible */
-  #f1 { opacity: 1; transform: scale(1); }
+  /* F1 (closed eyes) starts visible */
+  #f1 { opacity: 1; }
 
   /* ── TITLE OVERLAY ── */
   #title {
@@ -55,6 +54,7 @@
     pointer-events: none;
     user-select: none;
     text-shadow: none;
+    mix-blend-mode: screen;
   }
 
   /* ── SUBTITLE ── */
@@ -92,16 +92,16 @@
     font-size: 0.55rem;
     letter-spacing: 0.42em;
     text-transform: uppercase;
-    color: rgba(255,255,255,0.4);
+    color: rgba(255,255,255,0.3);
     font-family: 'Courier New', monospace;
   }
   #scroll-cue .line {
     width: 1px;
     height: 2rem;
-    background: linear-gradient(to bottom, rgba(255,255,255,0.4), transparent);
+    background: linear-gradient(to bottom, rgba(255,255,255,0.3), transparent);
     animation: pulse 2s ease-in-out infinite;
   }
-  @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
+  @keyframes pulse { 0%,100%{opacity:0.2} 50%{opacity:0.8} }
 
   /* ── DEBUG ── */
   #dbg {
@@ -112,7 +112,7 @@
     font-size: 0.5rem;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: rgba(255,255,255,0.18);
+    color: rgba(255,255,255,0.15);
     pointer-events: none;
   }
 </style>
@@ -120,12 +120,16 @@
 <body>
 
 <div id="stage">
-  <!-- Image sequence — 5 frames, crossfaded by scroll -->
+  <!-- 9 image frames — scroll crossfades between them -->
   <img id="f1" class="frame" src="../assets/img/seidr_f1.png" alt="" draggable="false" />
   <img id="f2" class="frame" src="../assets/img/seidr_f2.png" alt="" draggable="false" />
   <img id="f3" class="frame" src="../assets/img/seidr_f3.png" alt="" draggable="false" />
   <img id="f4" class="frame" src="../assets/img/seidr_f4.png" alt="" draggable="false" />
   <img id="f5" class="frame" src="../assets/img/seidr_f5.png" alt="" draggable="false" />
+  <img id="f6" class="frame" src="../assets/img/seidr_f6.png" alt="" draggable="false" />
+  <img id="f7" class="frame" src="../assets/img/seidr_f7.png" alt="" draggable="false" />
+  <img id="f8" class="frame" src="../assets/img/seidr_f8.png" alt="" draggable="false" />
+  <img id="f9" class="frame" src="../assets/img/seidr_f9.png" alt="" draggable="false" />
 </div>
 
 <div id="title">SEIÐR</div>
@@ -135,149 +139,168 @@
 
 <script>
 /* ════════════════════════════════════════════════════
-   SEIÐR — Scroll-driven image crossfade
-   Exactly like the ОЧИ site: real photograph frames
-   crossfade based on virtual scroll progress.
-   No canvas drawing over the image.
+   SEIÐR — 9-frame scroll-driven image crossfade
+   ════════════════════════════════════════════════════
+   Arc (9 frames, 8 transitions):
+   f1  p=0.00      — eyes closed (start)
+   f2  p=0.05→0.15 — barely open / thin amber slit
+   f3  p=0.18→0.28 — half open
+   f4  p=0.32→0.42 — fully open, calm amber
+   f5  p=0.46→0.54 — amber glowing intensely
+   f6  p=0.57→0.65 — crimson rune irises
+   f7  p=0.68→0.75 — white-gold void peak
+   f8  p=0.78→0.86 — dimming, amber returning
+   f9  p=0.90→0.98 — eyes closing (end)
    ════════════════════════════════════════════════════ */
 
-const frames   = [f1, f2, f3, f4, f5];
+const FRAMES = [f1,f2,f3,f4,f5,f6,f7,f8,f9];
+const NAMES  = ['CLOSED','OPENING','HALF-OPEN','AWAKE','IGNITE','CRIMSON','VOID','DIMMING','CLOSING'];
 const title    = document.getElementById('title');
 const subtitle = document.getElementById('subtitle');
 const cue      = document.getElementById('scroll-cue');
 const dbg      = document.getElementById('dbg');
 
-// Pre-load all images
-frames.forEach(img => { img.decode && img.decode().catch(() => {}); });
+// Pre-decode all frames
+FRAMES.forEach(img => img.decode && img.decode().catch(() => {}));
 
-// ── VIRTUAL SCROLL ──
-// Segment map: each frame transition occupies a portion of 0→1 progress
-// 5 images → 4 transitions, plus hold regions
-// p=0   : f1 fully visible (natural eyes)
-// p=0.15: begin crossfade f1→f2 (dilating)
-// p=0.30: f2 fully visible; begin crossfade f2→f3
-// p=0.45: f3 fully visible (possessed)
-// p=0.58: begin crossfade f3→f4
-// p=0.68: f4 fully visible (void)
-// p=0.78: begin crossfade f4→f5
-// p=0.90: f5 fully visible (return)
-// p=1.00: end
+// ── CROSSFADE SCHEDULE ──
+// Each entry: { hold_start, xfade_start, xfade_end, hold_end }
+// Frame i is fully visible during [hold_start → xfade_start],
+// crossfades into frame i+1 during [xfade_start → xfade_end],
+// and is gone by xfade_end.
+// Frame i+1 fades in from xfade_start → xfade_end.
 
-const SEGMENTS = [
-  { from: 0,    to: 0.18 },   // f1 hold
-  { from: 0.18, to: 0.36 },   // f1→f2 transition
-  { from: 0.36, to: 0.50 },   // f2 hold → into f3
-  { from: 0.50, to: 0.63 },   // f2→f3 transition
-  { from: 0.63, to: 0.73 },   // f3 hold → into f4
-  { from: 0.73, to: 0.82 },   // f3→f4 transition
-  { from: 0.82, to: 0.90 },   // f4→f5 transition
-  { from: 0.90, to: 1.00 },   // f5 hold
+const SCHEDULE = [
+  // f1: hold 0→0.05, fade out 0.05→0.15
+  { hs: 0.00, xs: 0.05, xe: 0.15 },
+  // f2: fade in 0.05→0.15, hold 0.15→0.18, fade out 0.18→0.28
+  { hs: 0.15, xs: 0.18, xe: 0.28 },
+  // f3: fade in 0.18→0.28, hold 0.28→0.32, fade out 0.32→0.42
+  { hs: 0.28, xs: 0.32, xe: 0.42 },
+  // f4: fade in 0.32→0.42, hold 0.42→0.46, fade out 0.46→0.54
+  { hs: 0.42, xs: 0.46, xe: 0.54 },
+  // f5: fade in 0.46→0.54, hold 0.54→0.57, fade out 0.57→0.65
+  { hs: 0.54, xs: 0.57, xe: 0.65 },
+  // f6: fade in 0.57→0.65, hold 0.65→0.68, fade out 0.68→0.75
+  { hs: 0.65, xs: 0.68, xe: 0.75 },
+  // f7: fade in 0.68→0.75, hold 0.75→0.78, fade out 0.78→0.86
+  { hs: 0.75, xs: 0.78, xe: 0.86 },
+  // f8: fade in 0.78→0.86, hold 0.86→0.90, fade out 0.90→0.98
+  { hs: 0.86, xs: 0.90, xe: 0.98 },
+  // f9: fade in 0.90→0.98, hold 0.98→1.0
+  { hs: 0.98, xs: 1.00, xe: 1.00 },
 ];
 
-// Given global progress p (0→1), compute opacity for each frame
-function computeOpacities(p) {
-  const ops = [0, 0, 0, 0, 0];
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const norm  = (v, lo, hi) => lo >= hi ? 1 : clamp((v - lo) / (hi - lo), 0, 1);
+const ease  = t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
 
-  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const norm  = (v, lo, hi) => clamp((v - lo) / (hi - lo), 0, 1);
+function computeOpacity(i, p) {
+  const s = SCHEDULE[i];
+  if (i === 0) {
+    // First frame: full until xs, then fades out
+    if (p < s.xs) return 1;
+    if (p < s.xe) return 1 - norm(p, s.xs, s.xe);
+    return 0;
+  }
+  if (i === FRAMES.length - 1) {
+    // Last frame: fades in from prev xe, holds forever
+    const prev = SCHEDULE[i-1];
+    if (p < prev.xs) return 0;
+    if (p < prev.xe) return norm(p, prev.xs, prev.xe);
+    return 1;
+  }
+  // Middle frames: fade in from prev transition, hold, fade out
+  const prev = SCHEDULE[i-1];
+  const fadeIn  = norm(p, prev.xs, prev.xe);
+  const hold    = p >= s.xs ? 1 : 1;   // already faded in
+  const fadeOut = p > s.xs ? 1 - norm(p, s.xs, s.xe) : 1;
 
-  // f1: full from 0 → 0.18, fades out 0.18 → 0.36
-  ops[0] = p < 0.18  ? 1
-         : p < 0.36  ? 1 - norm(p, 0.18, 0.36)
-         : 0;
-
-  // f2: fades in 0.18→0.36, full 0.36→0.50, fades out 0.50→0.63
-  ops[1] = p < 0.18  ? 0
-         : p < 0.36  ? norm(p, 0.18, 0.36)
-         : p < 0.50  ? 1
-         : p < 0.63  ? 1 - norm(p, 0.50, 0.63)
-         : 0;
-
-  // f3: fades in 0.50→0.63, full 0.63→0.73, fades out 0.73→0.82
-  ops[2] = p < 0.50  ? 0
-         : p < 0.63  ? norm(p, 0.50, 0.63)
-         : p < 0.73  ? 1
-         : p < 0.82  ? 1 - norm(p, 0.73, 0.82)
-         : 0;
-
-  // f4: fades in 0.73→0.82, full 0.82→0.88, fades out 0.88→0.93
-  ops[3] = p < 0.73  ? 0
-         : p < 0.82  ? norm(p, 0.73, 0.82)
-         : p < 0.88  ? 1
-         : p < 0.93  ? 1 - norm(p, 0.88, 0.93)
-         : 0;
-
-  // f5: fades in 0.88→0.93, holds to 1.0
-  ops[4] = p < 0.88  ? 0
-         : p < 0.93  ? norm(p, 0.88, 0.93)
-         : 1;
-
-  return ops;
+  if (p < prev.xs)  return 0;
+  if (p < prev.xe)  return ease(norm(p, prev.xs, prev.xe));
+  if (p < s.xs)     return 1;
+  if (p < s.xe)     return ease(1 - norm(p, s.xs, s.xe));
+  return 0;
 }
 
-// Easing
-const ease = t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
-
 // ── RENDER ──
-function render(dp) {
-  const p = dp;
-  const ops = computeOpacities(p);
-  frames.forEach((img, i) => {
-    img.style.opacity = ops[i].toFixed(4);
-  });
-
-  // Subtle zoom: f3 (possessed) scales up slightly as it peaks
-  f3.style.transform = `scale(${1 + ops[2] * 0.06})`;
-
-  // Title: appears at f2, peaks at f3, fades at f4
-  let ta = 0, ts = 0;
-  if (p > 0.25 && p < 0.90) {
-    const inT   = Math.min(1, (p - 0.25) / 0.15);
-    const outT  = p > 0.78 ? Math.max(0, 1 - (p - 0.78) / 0.12) : 1;
-    ta = ease(inT) * outT;
+function render(p) {
+  // Compute opacities for all 9 frames
+  for (let i = 0; i < FRAMES.length; i++) {
+    const op = computeOpacity(i, p);
+    FRAMES[i].style.opacity = op.toFixed(4);
   }
-  const tr = 120 + ops[2] * 120; // amber → red during possession
-  title.style.color     = `rgba(255,${Math.round(255-ops[2]*180)},${Math.round(255-ops[2]*240)},${ta.toFixed(3)})`;
-  title.style.textShadow = ta > 0.05
-    ? `0 0 60px rgba(255,${Math.round(200-ops[2]*180)},0,${(ta*0.6).toFixed(3)}), 0 0 120px rgba(180,0,0,${(ops[2]*ta*0.4).toFixed(3)})`
+
+  // Subtle scale: f7 (void) gets slight zoom at peak
+  const f7op = computeOpacity(6, p);
+  f7.style.transform = `scale(${1 + f7op * 0.04})`;
+
+  // ── TITLE ──
+  // Appears gently as eyes open (p≈0.3), peaks during glow phases,
+  // turns crimson at f6, white-gold at f7, fades as eyes close
+  let ta = 0;
+  if (p > 0.28 && p < 0.94) {
+    const inT  = ease(clamp((p - 0.28) / 0.14, 0, 1));
+    const outT = p > 0.86 ? ease(clamp(1 - (p - 0.86) / 0.08, 0, 1)) : 1;
+    ta = inT * outT;
+  }
+
+  // Color transitions: white → amber (f5) → red (f6) → white-gold (f7) → amber (f8) → white
+  const f5op = computeOpacity(4, p);
+  const f6op = computeOpacity(5, p);
+  const f7op2 = computeOpacity(6, p);
+  const f8op = computeOpacity(7, p);
+
+  const r = 255;
+  const g = Math.round(255 - f6op * 180 - f5op * 40 + f7op2 * 30);
+  const b = Math.round(255 - f5op * 200 - f6op * 240 - f7op2 * 100 + f8op * 100);
+
+  title.style.color = `rgba(${r},${clamp(g,0,255)},${clamp(b,20,255)},${ta.toFixed(3)})`;
+
+  const glowA  = (f5op * 0.5 + f6op * 0.7 + f7op2 * 0.9) * ta;
+  const glowR  = Math.round(255 * (f6op > 0.3 ? 0.5 : 1));
+  const glowG2 = Math.round(f7op2 * 150);
+  title.style.textShadow = glowA > 0.05
+    ? `0 0 50px rgba(${glowR},${glowG2},0,${glowA.toFixed(3)}), 0 0 120px rgba(${glowR},0,0,${(glowA*0.4).toFixed(3)})`
     : 'none';
 
-  // Subtitle fades in with title
-  subtitle.style.color = `rgba(255,255,255,${(ta * 0.45).toFixed(3)})`;
+  // Subtitle
+  subtitle.style.color = `rgba(255,255,255,${(ta * 0.4).toFixed(3)})`;
 
-  // Scroll cue fades out once scrolling starts
-  cue.style.opacity = p < 0.04 ? 1 : Math.max(0, 1 - p * 18);
+  // Scroll cue: fade out once scrolling begins
+  cue.style.opacity = p < 0.03 ? 1 : Math.max(0, 1 - (p - 0.03) * 25).toFixed(3);
 
   // Debug
-  const names = ['NATURAL','DILATE','POSSESSED','VOID','RETURN'];
-  const dominant = ops.indexOf(Math.max(...ops));
-  dbg.textContent = `${names[dominant]}  ${(p*100).toFixed(0)}%`;
+  const ops = FRAMES.map((_, i) => computeOpacity(i, p));
+  const dom = ops.indexOf(Math.max(...ops));
+  dbg.textContent = `${NAMES[dom]}  ${(p*100).toFixed(0)}%`;
 }
 
 // ── VIRTUAL WHEEL ENGINE ──
-const TOTAL_WHEEL = 3000;
-let vp = 0;  // target progress
-let dp = 0;  // display progress (smoothed)
+const TOTAL_WHEEL = 4000; // slightly longer feel for 9 frames
+let vp = 0;   // target progress
+let dp = 0;   // displayed progress (lerped)
 
 window.addEventListener('wheel', e => {
   e.preventDefault();
   vp = Math.max(0, Math.min(1, vp + e.deltaY / TOTAL_WHEEL));
 }, { passive: false });
 
+let _ty = 0;
 window.addEventListener('touchstart', e => {
   _ty = e.touches[0].clientY;
 }, { passive: true });
 
-let _ty = 0;
 window.addEventListener('touchmove', e => {
   e.preventDefault();
-  vp = Math.max(0, Math.min(1, vp + (_ty - e.touches[0].clientY) / (TOTAL_WHEEL * 0.3)));
+  const dy = _ty - e.touches[0].clientY;
   _ty = e.touches[0].clientY;
+  vp = Math.max(0, Math.min(1, vp + dy / (TOTAL_WHEEL * 0.28)));
 }, { passive: false });
 
 // ── TICK ──
 function tick() {
-  dp += (vp - dp) * 0.07;
+  dp += (vp - dp) * 0.06;  // slightly slower lerp = smoother transitions
   render(dp);
   requestAnimationFrame(tick);
 }
