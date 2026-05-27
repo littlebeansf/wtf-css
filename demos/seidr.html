@@ -21,34 +21,23 @@
     overflow: hidden;
   }
 
-  /* Each frame sits full-bleed, opacity + alignment corrected */
+  /* Each frame: pre-cropped to 1023×575 (16:9) with pupils pixel-locked.
+     object-fit:cover fills the canvas; pupils are at exactly 50% x / 48% y
+     in every image, so cover never drifts them. */
   .frame {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    /* Anchor object-fit to the pupil midpoint.
-       Pupils are at ~49% horizontally, ~30% vertically in 1023×1537 */
-    object-position: 49% 30%;
+    object-position: 50% 48%;
     opacity: 0;
-    will-change: opacity, transform, filter;
-    /* transform-origin centered on the pupils */
-    transform-origin: 49% 30%;
+    will-change: opacity, filter;
+    transform-origin: 50% 48%;
+    transform: none;
   }
 
-  /* Per-frame alignment corrections (pupil-lock)
-     Values from pixel analysis — shift each frame so its pupil
-     midpoint matches f1's reference position (502.5, 459.0) */
-  #f1 { opacity: 1; transform: translate(  0.00%,  0.00%); }
-  #f2 {             transform: translate( -0.29%, -0.26%) scale(0.9922); }
-  #f3 {             transform: translate( -0.10%,  0.03%); }
-  #f4 {             transform: translate( -0.73%, -2.28%) scale(0.9494); }
-  #f5 {             transform: translate( -0.29%, -0.65%) scale(0.9845); }
-  #f6 {             transform: translate( -0.39%, -1.24%) scale(0.9694); }
-  #f7 {             transform: translate( -0.44%, -0.52%) scale(0.9864); }
-  #f8 {             transform:  translate( 0.05%, -0.62%) scale(0.9941); }
-  #f9 {             transform: translate( -0.20%, -0.13%) scale(1.0080); }
+  #f1 { opacity: 1; }
 
   /* ── TITLE ── */
   #title {
@@ -244,7 +233,7 @@ function render(p) {
 
   // Subtle zoom on f7 (void) peak
   const f7op = frameOpacity(6, p);
-  f7.style.transform = `translate(-0.44%, -0.52%) scale(${(0.9864 + f7op * 0.04).toFixed(4)})`;
+  f7.style.transform = `scale(${(1.0 + f7op * 0.04).toFixed(4)})`;
 
   // ── TITLE ──
   let ta = 0;
