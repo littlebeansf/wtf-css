@@ -11,60 +11,73 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #080808;
+    background: #000;
   }
 
-  /* Full-bleed face, fills the whole iframe */
-  #face {
+  /* ── STAGE ── */
+  #stage {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* Each frame is absolute, full-bleed, opacity-controlled */
+  .frame {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: center 40%;
-    display: block;
-    user-select: none;
-    pointer-events: none;
+    object-position: center 30%;
+    opacity: 0;
+    will-change: opacity;
+    /* Slight zoom on mid-journey frames for pull-in effect */
+    transform: scale(1.04);
+    transition: none; /* JS controls this */
   }
 
-  /* Canvas sits on top */
-  #eye-canvas {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
+  /* F1 starts visible */
+  #f1 { opacity: 1; transform: scale(1); }
 
-  /* Vignette darkens edges */
-  #vignette {
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse at center,
-      transparent 25%,
-      rgba(8,8,8,0.45) 65%,
-      rgba(8,8,8,0.82) 100%);
-    pointer-events: none;
-  }
-
-  /* SEIÐR title */
+  /* ── TITLE OVERLAY ── */
   #title {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: clamp(3.5rem, 9vw, 7.5rem);
     font-family: 'Georgia', 'Times New Roman', serif;
-    font-weight: 700;
-    letter-spacing: 0.22em;
-    color: rgba(245,200,66,0);
+    font-size: clamp(3rem, 8vw, 7rem);
+    font-weight: 400;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0);
+    text-align: center;
+    white-space: nowrap;
     pointer-events: none;
     user-select: none;
-    white-space: nowrap;
+    text-shadow: none;
   }
 
-  /* Scroll cue */
+  /* ── SUBTITLE ── */
+  #subtitle {
+    position: absolute;
+    top: calc(50% + clamp(3rem, 6vw, 5.5rem));
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Courier New', monospace;
+    font-size: clamp(0.5rem, 1.1vw, 0.8rem);
+    letter-spacing: 0.45em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0);
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+    text-align: center;
+  }
+
+  /* ── SCROLL CUE ── */
   #scroll-cue {
     position: absolute;
-    bottom: 2rem;
+    bottom: 2.2rem;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -72,295 +85,199 @@
     align-items: center;
     gap: 0.5rem;
     pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.6s ease;
   }
   #scroll-cue span {
-    font-size: 0.58rem;
-    letter-spacing: 0.38em;
-    text-transform: uppercase;
-    color: rgba(232,160,32,0.55);
-    font-family: 'Courier New', monospace;
-  }
-  #scroll-cue .arrow {
-    width: 1px;
-    height: 2.2rem;
-    background: linear-gradient(to bottom, rgba(232,160,32,0.55), transparent);
-    animation: pulse 1.8s ease-in-out infinite;
-  }
-  @keyframes pulse { 0%,100%{opacity:.3} 50%{opacity:1} }
-
-  /* Phase debug label */
-  #phase-label {
-    position: absolute;
-    bottom: 1.8rem;
-    right: 1.5rem;
     font-size: 0.55rem;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.42em;
     text-transform: uppercase;
-    color: rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.4);
     font-family: 'Courier New', monospace;
+  }
+  #scroll-cue .line {
+    width: 1px;
+    height: 2rem;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.4), transparent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
+
+  /* ── DEBUG ── */
+  #dbg {
+    position: absolute;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.5rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.18);
     pointer-events: none;
   }
 </style>
 </head>
 <body>
 
-<img id="face" src="../assets/img/shaman_face.png" alt="Viking Seiðr Shaman" />
-<div id="vignette"></div>
-<canvas id="eye-canvas"></canvas>
+<div id="stage">
+  <!-- Image sequence — 5 frames, crossfaded by scroll -->
+  <img id="f1" class="frame" src="../assets/img/seidr_f1.png" alt="" draggable="false" />
+  <img id="f2" class="frame" src="../assets/img/seidr_f2.png" alt="" draggable="false" />
+  <img id="f3" class="frame" src="../assets/img/seidr_f3.png" alt="" draggable="false" />
+  <img id="f4" class="frame" src="../assets/img/seidr_f4.png" alt="" draggable="false" />
+  <img id="f5" class="frame" src="../assets/img/seidr_f5.png" alt="" draggable="false" />
+</div>
+
 <div id="title">SEIÐR</div>
-<div id="scroll-cue"><span>scroll</span><div class="arrow"></div></div>
-<div id="phase-label">NORMAL  0%</div>
+<div id="subtitle">ᛋᛖᛁᚦᚱ · nordic seiðr trance</div>
+<div id="scroll-cue"><span>scroll</span><div class="line"></div></div>
+<div id="dbg">—</div>
 
 <script>
-/* ══════════════════════════════════════════════════════
-   SEIÐR — Virtual-scroll eye possession engine
-   No DOM scroll. Pure wheel/touch → virtualProgress.
-   ══════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════
+   SEIÐR — Scroll-driven image crossfade
+   Exactly like the ОЧИ site: real photograph frames
+   crossfade based on virtual scroll progress.
+   No canvas drawing over the image.
+   ════════════════════════════════════════════════════ */
 
-const canvas = document.getElementById('eye-canvas');
-const ctx    = canvas.getContext('2d');
-const title  = document.getElementById('title');
-const cue    = document.getElementById('scroll-cue');
-const label  = document.getElementById('phase-label');
+const frames   = [f1, f2, f3, f4, f5];
+const title    = document.getElementById('title');
+const subtitle = document.getElementById('subtitle');
+const cue      = document.getElementById('scroll-cue');
+const dbg      = document.getElementById('dbg');
 
-// ── CALIBRATED EYE POSITIONS ──
-// Measured from 1024×1536 portrait at object-position center 40% in 1400×900 viewport
-const EYES = [
-  { xf: 0.308, yf: 0.484 },
-  { xf: 0.684, yf: 0.484 },
+// Pre-load all images
+frames.forEach(img => { img.decode && img.decode().catch(() => {}); });
+
+// ── VIRTUAL SCROLL ──
+// Segment map: each frame transition occupies a portion of 0→1 progress
+// 5 images → 4 transitions, plus hold regions
+// p=0   : f1 fully visible (natural eyes)
+// p=0.15: begin crossfade f1→f2 (dilating)
+// p=0.30: f2 fully visible; begin crossfade f2→f3
+// p=0.45: f3 fully visible (possessed)
+// p=0.58: begin crossfade f3→f4
+// p=0.68: f4 fully visible (void)
+// p=0.78: begin crossfade f4→f5
+// p=0.90: f5 fully visible (return)
+// p=1.00: end
+
+const SEGMENTS = [
+  { from: 0,    to: 0.18 },   // f1 hold
+  { from: 0.18, to: 0.36 },   // f1→f2 transition
+  { from: 0.36, to: 0.50 },   // f2 hold → into f3
+  { from: 0.50, to: 0.63 },   // f2→f3 transition
+  { from: 0.63, to: 0.73 },   // f3 hold → into f4
+  { from: 0.73, to: 0.82 },   // f3→f4 transition
+  { from: 0.82, to: 0.90 },   // f4→f5 transition
+  { from: 0.90, to: 1.00 },   // f5 hold
 ];
-const IRIS_R_FRAC = 0.067;   // iris radius as fraction of viewport width
 
-// ── COLOURS ──
-const C = {
-  amber: [232,160, 32],
-  gold:  [245,200, 66],
-  cyan:  [  0,229,255],
-  pink:  [255, 45,120],
-  white: [255,255,255],
-  black: [  4,  2,  0],
-};
-const rgba = (col, a) => `rgba(${col[0]},${col[1]},${col[2]},${a.toFixed(3)})`;
+// Given global progress p (0→1), compute opacity for each frame
+function computeOpacities(p) {
+  const ops = [0, 0, 0, 0, 0];
 
-// ── PHASES [start, end] fraction of 0–1 ──
-const PHASES = [
-  { name:'NORMAL',   s:0.00, e:0.10 },
-  { name:'DILATE',   s:0.10, e:0.24 },
-  { name:'SPIRAL',   s:0.24, e:0.40 },
-  { name:'ALGIZ ᛉ',  s:0.40, e:0.56 },
-  { name:'VOID',     s:0.56, e:0.68 },
-  { name:'OTHALA ᛟ', s:0.68, e:0.82 },
-  { name:'RETURN',   s:0.82, e:1.00 },
-];
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const norm  = (v, lo, hi) => clamp((v - lo) / (hi - lo), 0, 1);
 
-// ── HELPERS ──
-const lerp  = (a,b,t) => a+(b-a)*t;
-const clamp = (v,lo,hi) => Math.max(lo,Math.min(hi,v));
-const ease  = t => t<.5 ? 2*t*t : -1+(4-2*t)*t;
+  // f1: full from 0 → 0.18, fades out 0.18 → 0.36
+  ops[0] = p < 0.18  ? 1
+         : p < 0.36  ? 1 - norm(p, 0.18, 0.36)
+         : 0;
 
-function phaseOf(p) {
-  for (let i=0; i<PHASES.length; i++) {
-    const ph = PHASES[i];
-    if (p >= ph.s && p < ph.e + 0.001) {
-      return { idx:i, t: clamp((p-ph.s)/(ph.e-ph.s), 0, 1) };
-    }
-  }
-  return { idx:PHASES.length-1, t:1 };
+  // f2: fades in 0.18→0.36, full 0.36→0.50, fades out 0.50→0.63
+  ops[1] = p < 0.18  ? 0
+         : p < 0.36  ? norm(p, 0.18, 0.36)
+         : p < 0.50  ? 1
+         : p < 0.63  ? 1 - norm(p, 0.50, 0.63)
+         : 0;
+
+  // f3: fades in 0.50→0.63, full 0.63→0.73, fades out 0.73→0.82
+  ops[2] = p < 0.50  ? 0
+         : p < 0.63  ? norm(p, 0.50, 0.63)
+         : p < 0.73  ? 1
+         : p < 0.82  ? 1 - norm(p, 0.73, 0.82)
+         : 0;
+
+  // f4: fades in 0.73→0.82, full 0.82→0.88, fades out 0.88→0.93
+  ops[3] = p < 0.73  ? 0
+         : p < 0.82  ? norm(p, 0.73, 0.82)
+         : p < 0.88  ? 1
+         : p < 0.93  ? 1 - norm(p, 0.88, 0.93)
+         : 0;
+
+  // f5: fades in 0.88→0.93, holds to 1.0
+  ops[4] = p < 0.88  ? 0
+         : p < 0.93  ? norm(p, 0.88, 0.93)
+         : 1;
+
+  return ops;
 }
 
-// ── RESIZE ──
-function resize() {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-window.addEventListener('resize', () => { resize(); });
-resize();
-
-// ── DRAW ONE EYE ──
-let angle = 0;
-
-function drawEye(cx, cy, R, idx, t) {
-  const pupR = R * 0.28;
-
-  function runeAlgiz(a) {
-    ctx.save(); ctx.translate(cx,cy);
-    const h = R*0.72;
-    ctx.strokeStyle = rgba(C.cyan, a);
-    ctx.lineWidth = R*0.10; ctx.lineCap='round';
-    ctx.shadowColor = rgba(C.cyan, a*0.9); ctx.shadowBlur = R*0.7;
-    ctx.beginPath();
-    ctx.moveTo(0,h); ctx.lineTo(0,-h);
-    ctx.moveTo(0,-h*0.05); ctx.lineTo(-h*0.58,-h*0.72);
-    ctx.moveTo(0,-h*0.05); ctx.lineTo( h*0.58,-h*0.72);
-    ctx.stroke(); ctx.restore();
-  }
-
-  function runeOthala(a) {
-    ctx.save(); ctx.translate(cx,cy);
-    const hw=R*0.50, hh=R*0.55, leg=R*0.22;
-    ctx.strokeStyle = rgba(C.pink, a);
-    ctx.lineWidth = R*0.10; ctx.lineCap='round';
-    ctx.shadowColor = rgba(C.pink, a*0.9); ctx.shadowBlur = R*0.7;
-    ctx.beginPath();
-    ctx.moveTo(0,-hh); ctx.lineTo(hw,0); ctx.lineTo(0,hh); ctx.lineTo(-hw,0); ctx.closePath();
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-hw*0.55, hh*0.42); ctx.lineTo(-hw*0.55, hh*0.42+leg);
-    ctx.moveTo( hw*0.55, hh*0.42); ctx.lineTo( hw*0.55, hh*0.42+leg);
-    ctx.stroke(); ctx.restore();
-  }
-
-  if (idx === 0) return; // NORMAL — no overlay
-
-  if (idx === 1) { // DILATE
-    const big = ease(t);
-    const bigP = lerp(pupR, R*0.70, big);
-    const g = ctx.createRadialGradient(cx,cy,bigP*0.9, cx,cy,R);
-    g.addColorStop(0, rgba(C.amber,0));
-    g.addColorStop(0.4, rgba(C.gold, big*0.5));
-    g.addColorStop(1, rgba(C.amber, big*0.25));
-    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
-    ctx.beginPath(); ctx.arc(cx,cy,bigP,0,Math.PI*2);
-    ctx.fillStyle=rgba(C.black, lerp(0.2,0.9,big)); ctx.fill();
-    return;
-  }
-
-  if (idx === 2) { // SPIRAL
-    const sp = ease(t);
-    ctx.beginPath(); ctx.arc(cx,cy,R*0.68,0,Math.PI*2);
-    ctx.fillStyle=rgba(C.black,0.72); ctx.fill();
-    ctx.save();
-    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.clip();
-    for (let arm=0; arm<2; arm++) {
-      ctx.beginPath();
-      const turns=3.5+sp*2, spin=angle*(1+sp*3), off=arm*Math.PI;
-      for (let i=0; i<=240; i++) {
-        const f=i/240, r=f*R*0.66, a=f*Math.PI*2*turns+spin+off;
-        const x=cx+r*Math.cos(a), y=cy+r*Math.sin(a);
-        i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
-      }
-      ctx.strokeStyle=rgba(arm===0?C.gold:C.amber, sp*0.85);
-      ctx.lineWidth=R*0.065; ctx.lineCap='round';
-      ctx.shadowColor=rgba(C.gold,sp*0.5); ctx.shadowBlur=14;
-      ctx.stroke();
-    }
-    const rim=ctx.createRadialGradient(cx,cy,R*0.55, cx,cy,R);
-    rim.addColorStop(0,rgba(C.gold,0)); rim.addColorStop(1,rgba(C.gold,sp*0.55));
-    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fillStyle=rim; ctx.fill();
-    ctx.restore(); return;
-  }
-
-  if (idx === 3) { // ALGIZ
-    const ap = ease(t);
-    const g=ctx.createRadialGradient(cx,cy,0, cx,cy,R);
-    g.addColorStop(0,rgba(C.gold,ap*0.95));
-    g.addColorStop(0.5,rgba(C.white,ap*0.88));
-    g.addColorStop(1,rgba(C.cyan,ap*0.35));
-    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
-    runeAlgiz(ap*(0.65+0.35*Math.sin(angle*3.2))); return;
-  }
-
-  if (idx === 4) { // VOID
-    const vp = ease(t);
-    ctx.beginPath(); ctx.arc(cx,cy,R*1.06,0,Math.PI*2);
-    ctx.fillStyle=rgba(C.white,vp); ctx.fill();
-    const halo=ctx.createRadialGradient(cx,cy,R*0.8, cx,cy,R*1.4);
-    halo.addColorStop(0,rgba(C.white,0)); halo.addColorStop(1,rgba(C.gold,vp*0.3));
-    ctx.beginPath(); ctx.arc(cx,cy,R*1.4,0,Math.PI*2); ctx.fillStyle=halo; ctx.fill();
-    return;
-  }
-
-  if (idx === 5) { // OTHALA
-    const op = ease(t);
-    const g=ctx.createRadialGradient(cx,cy,0, cx,cy,R);
-    g.addColorStop(0,rgba(C.pink,op*0.45));
-    g.addColorStop(0.4,rgba(C.amber,op*0.92));
-    g.addColorStop(1,rgba(C.gold,op*0.65));
-    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
-    ctx.beginPath(); ctx.arc(cx,cy,pupR,0,Math.PI*2);
-    ctx.fillStyle=rgba(C.black,op*0.9); ctx.fill();
-    runeOthala(op*(0.6+0.4*Math.sin(angle*2.8))); return;
-  }
-
-  if (idx === 6) { // RETURN
-    const fade = 1-ease(t);
-    if (fade < 0.02) return;
-    const g=ctx.createRadialGradient(cx,cy,0, cx,cy,R);
-    g.addColorStop(0,rgba(C.black,0));
-    g.addColorStop(0.35,rgba(C.amber,fade*0.30));
-    g.addColorStop(1,rgba(C.gold,fade*0.20));
-    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
-    ctx.save();
-    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.clip();
-    ctx.beginPath();
-    for (let i=0; i<=160; i++) {
-      const f=i/160, r=f*R*0.6, a=f*Math.PI*2*3-angle*1.2;
-      const x=cx+r*Math.cos(a), y=cy+r*Math.sin(a);
-      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
-    }
-    ctx.strokeStyle=rgba(C.gold,fade*0.35); ctx.lineWidth=R*0.05;
-    ctx.shadowColor=rgba(C.gold,fade*0.2); ctx.shadowBlur=8;
-    ctx.stroke(); ctx.restore(); return;
-  }
-}
+// Easing
+const ease = t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
 
 // ── RENDER ──
-function render(p) {
-  const W=canvas.width, H=canvas.height;
-  ctx.clearRect(0,0,W,H);
-  const R=W*IRIS_R_FRAC;
-  const {idx,t}=phaseOf(p);
-  for (const eye of EYES) drawEye(eye.xf*W, eye.yf*H, R, idx, t);
+function render(dp) {
+  const p = dp;
+  const ops = computeOpacities(p);
+  frames.forEach((img, i) => {
+    img.style.opacity = ops[i].toFixed(4);
+  });
 
-  // title
-  let ta=0;
-  if(idx===2) ta=ease(t)*0.72;
-  else if(idx===3) ta=0.88;
-  else if(idx===4) ta=lerp(0.88,0,ease(t));
-  else if(idx===5) ta=ease(t)*0.65;
-  else if(idx===6) ta=lerp(0.65,0,ease(t));
-  title.style.color=`rgba(245,200,66,${ta})`;
-  title.style.textShadow=ta>0.01
-    ?`0 0 40px rgba(245,200,66,${ta*0.55}),0 0 80px rgba(245,200,66,${ta*0.25})`
-    :'none';
+  // Subtle zoom: f3 (possessed) scales up slightly as it peaks
+  f3.style.transform = `scale(${1 + ops[2] * 0.06})`;
 
-  // scroll cue
-  cue.style.opacity = p<0.06 ? 1 : Math.max(0,1-p*14);
+  // Title: appears at f2, peaks at f3, fades at f4
+  let ta = 0, ts = 0;
+  if (p > 0.25 && p < 0.90) {
+    const inT   = Math.min(1, (p - 0.25) / 0.15);
+    const outT  = p > 0.78 ? Math.max(0, 1 - (p - 0.78) / 0.12) : 1;
+    ta = ease(inT) * outT;
+  }
+  const tr = 120 + ops[2] * 120; // amber → red during possession
+  title.style.color     = `rgba(255,${Math.round(255-ops[2]*180)},${Math.round(255-ops[2]*240)},${ta.toFixed(3)})`;
+  title.style.textShadow = ta > 0.05
+    ? `0 0 60px rgba(255,${Math.round(200-ops[2]*180)},0,${(ta*0.6).toFixed(3)}), 0 0 120px rgba(180,0,0,${(ops[2]*ta*0.4).toFixed(3)})`
+    : 'none';
 
-  // debug label
-  label.textContent=`${PHASES[idx].name}  ${(p*100).toFixed(0)}%`;
+  // Subtitle fades in with title
+  subtitle.style.color = `rgba(255,255,255,${(ta * 0.45).toFixed(3)})`;
+
+  // Scroll cue fades out once scrolling starts
+  cue.style.opacity = p < 0.04 ? 1 : Math.max(0, 1 - p * 18);
+
+  // Debug
+  const names = ['NATURAL','DILATE','POSSESSED','VOID','RETURN'];
+  const dominant = ops.indexOf(Math.max(...ops));
+  dbg.textContent = `${names[dominant]}  ${(p*100).toFixed(0)}%`;
 }
 
-// ══════════════════════════════════════════════════
-// VIRTUAL SCROLL ENGINE
-// wheel + touch → virtualProgress (0–1), no DOM scroll
-// Works inside iframes and standalone
-// ══════════════════════════════════════════════════
-
-const TOTAL_WHEEL = 3200;   // total deltaY units for full journey
-let vp = 0;   // virtual progress target
-let dp = 0;   // display progress (smoothed)
-let ty = 0;   // touch start Y
+// ── VIRTUAL WHEEL ENGINE ──
+const TOTAL_WHEEL = 3000;
+let vp = 0;  // target progress
+let dp = 0;  // display progress (smoothed)
 
 window.addEventListener('wheel', e => {
   e.preventDefault();
-  vp = clamp(vp + e.deltaY / TOTAL_WHEEL, 0, 1);
+  vp = Math.max(0, Math.min(1, vp + e.deltaY / TOTAL_WHEEL));
 }, { passive: false });
 
 window.addEventListener('touchstart', e => {
-  ty = e.touches[0].clientY;
+  _ty = e.touches[0].clientY;
 }, { passive: true });
 
+let _ty = 0;
 window.addEventListener('touchmove', e => {
   e.preventDefault();
-  vp = clamp(vp + (ty - e.touches[0].clientY) / (TOTAL_WHEEL * 0.3), 0, 1);
-  ty = e.touches[0].clientY;
+  vp = Math.max(0, Math.min(1, vp + (_ty - e.touches[0].clientY) / (TOTAL_WHEEL * 0.3)));
+  _ty = e.touches[0].clientY;
 }, { passive: false });
 
-// ── TICK: lerp + render every frame ──
+// ── TICK ──
 function tick() {
-  angle += 0.02;
-  dp += (vp - dp) * 0.09;
+  dp += (vp - dp) * 0.07;
   render(dp);
   requestAnimationFrame(tick);
 }
