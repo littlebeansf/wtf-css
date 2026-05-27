@@ -7,17 +7,44 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  body {
+  html, body {
     background: #000;
-    height: 500vh; /* tall scrollable page */
-    font-family: 'Space Grotesk', sans-serif;
-    overflow-x: hidden;
+    width: 100%;
+    height: 100%;
+    overflow: hidden; /* body itself does NOT scroll */
+    font-family: 'Space Mono', monospace;
   }
 
-  /* STICKY CONTAINER — viewport-locked face */
-  .stage {
+  /* ─── SCROLL CONTAINER ─────────────────────────────────────
+     This div is the actual scroller. It is taller than 100vh
+     so the browser registers scroll, but the face stays fixed.
+  ─────────────────────────────────────────────────────────── */
+  #scroller {
+    position: fixed;
+    inset: 0;
+    overflow-y: scroll;
+    overflow-x: hidden;
+    scroll-behavior: auto;
+    /* hide scrollbar visually */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  #scroller::-webkit-scrollbar { display: none; }
+
+  /* The tall ghost — gives height to scroll against */
+  #scroll-ghost {
+    height: 600vh;
+    width: 100%;
+    pointer-events: none;
+  }
+
+  /* ─── STICKY FACE STAGE ────────────────────────────────────
+     Sticks to the viewport the whole time, full w×h.
+  ─────────────────────────────────────────────────────────── */
+  #stage {
     position: sticky;
     top: 0;
+    width: 100%;
     height: 100vh;
     overflow: hidden;
     display: flex;
@@ -25,35 +52,28 @@
     justify-content: center;
   }
 
-  /* FACE — static background layer */
-  .face {
+  /* ─── CANVAS ────────────────────────────────────────────── */
+  #canvas {
     position: absolute;
     inset: 0;
-    background-image: url('../assets/img/face_eyes_open.png');
-    background-size: cover;
-    background-position: center top;
-    background-repeat: no-repeat;
+    width: 100%;
+    height: 100%;
   }
 
-  /* EYELIDS — clip-path animated by scroll */
-  .eyelid-top {
+  /* ─── AMBIENT BACKGROUND GLOW ───────────────────────────── */
+  #bg-glow {
     position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    background-image: url('../assets/img/face_eyes_closed.png');
-    background-size: cover;
-    background-position: center top;
-    background-repeat: no-repeat;
-    height: 100vh;
-
-    /* This clip-path reveals ONLY the top lid area */
-    clip-path: inset(0 0 var(--reveal) 0);
-    --reveal: 50%; /* controlled by JS */
+    inset: 0;
+    background: radial-gradient(ellipse 55% 35% at 50% 38%,
+      rgba(255,255,255,0) 0%,
+      rgba(0,0,0,0) 100%);
+    pointer-events: none;
+    transition: background 0.3s;
+    z-index: 2;
   }
 
-  /* SCROLL HINT */
-  .hint {
+  /* ─── SCROLL HINT ───────────────────────────────────────── */
+  #hint {
     position: fixed;
     bottom: 32px;
     left: 50%;
@@ -62,190 +82,517 @@
     flex-direction: column;
     align-items: center;
     gap: 8px;
-    color: rgba(255,255,255,0.5);
-    font-size: 11px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    pointer-events: none;
-    transition: opacity 0.5s;
-    font-family: 'Space Mono', monospace;
-  }
-
-  .hint.hidden {
-    opacity: 0;
-  }
-
-  .hint-arrow {
-    width: 1px;
-    height: 36px;
-    background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.4));
-    animation: pulse-arrow 1.5s ease-in-out infinite;
-  }
-
-  @keyframes pulse-arrow {
-    0%, 100% { opacity: 0.3; transform: scaleY(1); }
-    50% { opacity: 1; transform: scaleY(1.2); }
-  }
-
-  /* PROGRESS OVERLAY TEXT */
-  .progress-text {
-    position: fixed;
-    bottom: 32px;
-    right: 40px;
-    font-family: 'Space Mono', monospace;
+    color: rgba(255,255,255,0.35);
     font-size: 10px;
-    color: rgba(255,45,120,0.6);
-    letter-spacing: 0.1em;
-    pointer-events: none;
-  }
-
-  /* GLOW EFFECT on open */
-  .face-glow {
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse 60% 30% at 50% 36%,
-      rgba(255,45,120,0.18) 0%,
-      rgba(0,229,255,0.08) 40%,
-      transparent 70%);
-    opacity: 0;
-    transition: opacity 0.2s;
-    pointer-events: none;
-  }
-
-  /* CAPTION */
-  .caption {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.4s;
-  }
-
-  .caption h2 {
-    font-size: clamp(2rem, 5vw, 5rem);
-    font-weight: 700;
-    color: #fff;
-    letter-spacing: -0.03em;
-    text-shadow: 0 0 40px rgba(255,45,120,0.8), 0 0 80px rgba(255,45,120,0.4);
-    line-height: 1;
-  }
-
-  .caption p {
-    margin-top: 12px;
-    font-size: 13px;
-    color: rgba(255,255,255,0.5);
     letter-spacing: 0.2em;
     text-transform: uppercase;
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+    z-index: 20;
     font-family: 'Space Mono', monospace;
   }
+  #hint.fade { opacity: 0; }
+  .hint-line {
+    width: 1px;
+    height: 40px;
+    background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.3));
+    animation: hint-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes hint-pulse {
+    0%, 100% { opacity: 0.2; transform: scaleY(0.8); }
+    50%       { opacity: 1;   transform: scaleY(1.1); }
+  }
 
-  /* TECHNIQUE BADGE */
-  .technique-badge {
+  /* ─── TECHNIQUE BADGE ───────────────────────────────────── */
+  #badge {
     position: fixed;
-    top: 70px;
-    right: 24px;
-    background: rgba(0,0,0,0.8);
-    border: 1px solid rgba(255,45,120,0.3);
+    top: 68px;
+    right: 22px;
+    background: rgba(0,0,0,0.75);
+    border: 1px solid rgba(255,255,255,0.1);
     border-radius: 8px;
     padding: 12px 16px;
     font-family: 'Space Mono', monospace;
-    font-size: 10px;
-    color: rgba(255,45,120,0.8);
+    font-size: 9.5px;
+    color: rgba(255,255,255,0.45);
+    line-height: 1.9;
     pointer-events: none;
-    line-height: 1.8;
     backdrop-filter: blur(10px);
-    max-width: 200px;
+    max-width: 190px;
+    z-index: 20;
+  }
+  #badge strong { color: rgba(255,255,255,0.8); display: block; margin-bottom: 3px; }
+
+  /* ─── PHASE LABEL (centre bottom) ──────────────────────── */
+  #phase-label {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,45,120,0.5);
+    letter-spacing: 0.12em;
+    pointer-events: none;
+    z-index: 20;
+    transition: opacity 0.3s;
   }
 
-  .technique-badge strong {
-    color: #ff2d78;
-    display: block;
-    margin-bottom: 4px;
-  }
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono&display=swap');
 </style>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Space+Mono&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono&display=swap" rel="stylesheet">
 </head>
 <body>
 
-<div class="stage" id="stage">
-  <div class="face" id="faceOpen"></div>
-  <div class="eyelid-top" id="eyelidTop"></div>
-  <div class="face-glow" id="faceGlow"></div>
+<div id="scroller">
+  <div id="scroll-ghost">
+    <!-- STICKY STAGE lives INSIDE the scroller so sticky works -->
+    <div id="stage">
+      <canvas id="canvas"></canvas>
+      <div id="bg-glow"></div>
+    </div>
+  </div>
 </div>
 
-<div class="hint" id="hint">
-  <span>scroll to open</span>
-  <div class="hint-arrow"></div>
+<div id="hint">
+  <span>scroll</span>
+  <div class="hint-line"></div>
 </div>
 
-<div class="progress-text" id="progressText">0%</div>
-
-<div class="caption" id="caption">
-  <h2>She sees you.</h2>
-  <p>pure css · no video · no canvas</p>
-</div>
-
-<div class="technique-badge">
+<div id="badge">
   <strong>How it works</strong>
-  clip-path: inset()<br>
-  background-image layering<br>
-  scroll progress → CSS var<br>
-  sticky positioning
+  Canvas 2D — no DOM<br>
+  Scroll → phase engine<br>
+  Eye geometry math<br>
+  SVG rune paths<br>
+  Radial white fill<br>
+  Sticky + ghost height
 </div>
+
+<div id="phase-label" id="phase-label"></div>
 
 <script>
-  const eyelid = document.getElementById('eyelidTop');
-  const glow = document.getElementById('faceGlow');
-  const hint = document.getElementById('hint');
-  const caption = document.getElementById('caption');
-  const progressText = document.getElementById('progressText');
+// ═══════════════════════════════════════════════════════════
+//  CONSTANTS & STATE
+// ═══════════════════════════════════════════════════════════
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+const scroller = document.getElementById('scroller');
+const hintEl   = document.getElementById('hint');
+const bgGlow   = document.getElementById('bg-glow');
+const phaseLabel = document.getElementById('phase-label');
 
-  const SCROLL_RANGE = window.innerHeight * 3; // scroll distance for full open
+let W, H;
+let face = new Image();
+face.src = '../assets/img/exorcism_face.png';
 
-  function lerp(a, b, t) { return a + (b - a) * t; }
-  function clamp(v, mn, mx) { return Math.min(Math.max(v, mn), mx); }
-  function easeInOut(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+// Eye positions — expressed as % of image so they scale
+// These are tuned to the generated face image (3:4 portrait)
+// Adjust EYE_L/R if image changes
+const EYE_DEF = {
+  // x as fraction of W, y as fraction of H
+  L: { xf: 0.345, yf: 0.355 },
+  R: { xf: 0.655, yf: 0.355 },
+  rf: 0.068   // iris radius as fraction of W
+};
 
-  let lastScroll = 0;
-  let raf = null;
+// ═══════════════════════════════════════════════════════════
+//  NORDIC RUNES — drawn with Canvas paths
+//  Each rune is a function(ctx, cx, cy, r) that draws a glyph
+//  inside circle of radius r centered at cx,cy
+// ═══════════════════════════════════════════════════════════
+const RUNES = [
+  // ᚦ Thurisaz — vertical spine + two diagonal thorns
+  function thurisaz(ctx, cx, cy, r) {
+    const s = r * 0.72;
+    ctx.lineWidth = r * 0.13;
+    ctx.lineCap = 'round';
+    // Spine
+    ctx.beginPath(); ctx.moveTo(cx, cy - s); ctx.lineTo(cx, cy + s); ctx.stroke();
+    // Upper thorn right
+    ctx.beginPath(); ctx.moveTo(cx, cy - s * 0.1); ctx.lineTo(cx + s * 0.7, cy - s * 0.45); ctx.stroke();
+    // Lower thorn right
+    ctx.beginPath(); ctx.moveTo(cx, cy + s * 0.1); ctx.lineTo(cx + s * 0.7, cy - s * 0.1); ctx.stroke();
+  },
 
-  function update() {
-    const scrollY = window.scrollY;
-    const progress = clamp(scrollY / SCROLL_RANGE, 0, 1);
-    const eased = easeInOut(progress);
+  // ᚨ Ansuz — N-shape with added serif hook
+  function ansuz(ctx, cx, cy, r) {
+    const s = r * 0.70;
+    ctx.lineWidth = r * 0.13;
+    ctx.lineCap = 'round';
+    // Left spine
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.45, cy - s); ctx.lineTo(cx - s * 0.45, cy + s); ctx.stroke();
+    // Right spine
+    ctx.beginPath(); ctx.moveTo(cx + s * 0.45, cy - s); ctx.lineTo(cx + s * 0.45, cy + s); ctx.stroke();
+    // Top diagonal
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.45, cy - s); ctx.lineTo(cx + s * 0.45, cy - s * 0.15); ctx.stroke();
+    // Bottom diagonal
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.45, cy + s * 0.15); ctx.lineTo(cx + s * 0.45, cy + s); ctx.stroke();
+  },
 
-    // Eyelid clip: starts at inset(0 0 50% 0) fully closed top
-    // As we scroll, bottom inset grows from 50% to 100% = eyelid lifts
-    const bottomInset = lerp(50, 100, eased);
-    eyelid.style.clipPath = `inset(0 0 ${bottomInset}% 0)`;
+  // ᛉ Algiz — upward trident / life rune
+  function algiz(ctx, cx, cy, r) {
+    const s = r * 0.75;
+    ctx.lineWidth = r * 0.13;
+    ctx.lineCap = 'round';
+    // Spine
+    ctx.beginPath(); ctx.moveTo(cx, cy - s); ctx.lineTo(cx, cy + s); ctx.stroke();
+    // Left branch
+    ctx.beginPath(); ctx.moveTo(cx, cy - s * 0.1); ctx.lineTo(cx - s * 0.55, cy - s * 0.65); ctx.stroke();
+    // Right branch
+    ctx.beginPath(); ctx.moveTo(cx, cy - s * 0.1); ctx.lineTo(cx + s * 0.55, cy - s * 0.65); ctx.stroke();
+  },
 
-    // Glow appears as eyes open
-    const glowOpacity = clamp((eased - 0.5) * 2, 0, 1);
-    glow.style.opacity = glowOpacity;
+  // ᛟ Othala — diamond with two feet
+  function othala(ctx, cx, cy, r) {
+    const s = r * 0.65;
+    ctx.lineWidth = r * 0.13;
+    ctx.lineCap = 'round';
+    // Diamond
+    ctx.beginPath();
+    ctx.moveTo(cx,          cy - s);
+    ctx.lineTo(cx + s,      cy);
+    ctx.lineTo(cx,          cy + s * 0.55);
+    ctx.lineTo(cx - s,      cy);
+    ctx.closePath(); ctx.stroke();
+    // Left foot
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.55, cy + s * 0.25); ctx.lineTo(cx - s * 0.55, cy + s); ctx.stroke();
+    // Right foot
+    ctx.beginPath(); ctx.moveTo(cx + s * 0.55, cy + s * 0.25); ctx.lineTo(cx + s * 0.55, cy + s); ctx.stroke();
+  },
 
-    // Hint fades out early
-    hint.classList.toggle('hidden', progress > 0.05);
+  // ᛗ Mannaz — M shape — humanity rune
+  function mannaz(ctx, cx, cy, r) {
+    const s = r * 0.70;
+    ctx.lineWidth = r * 0.13;
+    ctx.lineCap = 'round';
+    // Left spine
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.5, cy - s); ctx.lineTo(cx - s * 0.5, cy + s); ctx.stroke();
+    // Right spine
+    ctx.beginPath(); ctx.moveTo(cx + s * 0.5, cy - s); ctx.lineTo(cx + s * 0.5, cy + s); ctx.stroke();
+    // Left diagonal
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.5, cy - s); ctx.lineTo(cx, cy - s * 0.1); ctx.stroke();
+    // Right diagonal
+    ctx.beginPath(); ctx.moveTo(cx + s * 0.5, cy - s); ctx.lineTo(cx, cy - s * 0.1); ctx.stroke();
+    // Mid bar
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.5, cy + s * 0.1); ctx.lineTo(cx + s * 0.5, cy + s * 0.1); ctx.stroke();
+  },
 
-    // Caption appears when fully open
-    const captionOpacity = clamp((eased - 0.85) * 6, 0, 1);
-    caption.style.opacity = captionOpacity;
+  // ᛞ Dagaz — hourglass / infinity — the "day" rune
+  function dagaz(ctx, cx, cy, r) {
+    const s = r * 0.70;
+    ctx.lineWidth = r * 0.13;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx - s, cy - s);
+    ctx.lineTo(cx + s, cy + s);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + s, cy - s);
+    ctx.lineTo(cx - s, cy + s);
+    ctx.stroke();
+    // Left loop hint
+    ctx.beginPath();
+    ctx.moveTo(cx - s, cy - s);
+    ctx.lineTo(cx - s, cy + s);
+    ctx.stroke();
+    // Right loop hint
+    ctx.beginPath();
+    ctx.moveTo(cx + s, cy - s);
+    ctx.lineTo(cx + s, cy + s);
+    ctx.stroke();
+  }
+];
 
-    // Progress
-    progressText.textContent = Math.round(progress * 100) + '%';
+// Rune sequence: first appearance, second appearance (different rune)
+const RUNE_SEQ = [RUNES[2], RUNES[5]]; // Algiz then Dagaz
 
-    lastScroll = scrollY;
-    raf = null;
+// ═══════════════════════════════════════════════════════════
+//  RESIZE
+// ═══════════════════════════════════════════════════════════
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', () => { resize(); });
+
+// ═══════════════════════════════════════════════════════════
+//  SCROLL PHASE ENGINE
+//  Total scroll range = 500vh (ghost is 600vh, first 50 is
+//  the "intro" space at top, last 50 is exit space at bottom)
+//
+//  Progress 0→1 maps to the 6-phase exorcism sequence:
+//
+//  0.00 → 0.12  INTRO        — normal eyes, hint visible
+//  0.12 → 0.28  ROLL-UP-1    — iris rolls up, whites appear
+//  0.28 → 0.38  RUNE-1       — first rune burns in eyes
+//  0.38 → 0.52  ROLL-DOWN-1  — eyes roll back down briefly
+//  0.52 → 0.60  ROLL-UP-2    — iris rolls up again
+//  0.60 → 0.72  RUNE-2       — second rune glows differently
+//  0.72 → 0.82  RETURN-WHITE — whites fade, glow pulses
+//  0.82 → 1.00  RETURN-NORMAL— iris slides back, fully normal
+// ═══════════════════════════════════════════════════════════
+
+const PHASES = [
+  { name: 'NORMAL',       start: 0.00, end: 0.12 },
+  { name: 'ROLL UP',      start: 0.12, end: 0.28 },
+  { name: 'RUNE Ⅰ',       start: 0.28, end: 0.43 },
+  { name: 'ROLL DOWN',    start: 0.43, end: 0.54 },
+  { name: 'ROLL UP Ⅱ',   start: 0.54, end: 0.63 },
+  { name: 'RUNE Ⅱ',       start: 0.63, end: 0.76 },
+  { name: 'WHITE',        start: 0.76, end: 0.86 },
+  { name: 'RETURNING',    start: 0.86, end: 1.00 },
+];
+
+function phaseProgress(progress, phaseIdx) {
+  const p = PHASES[phaseIdx];
+  return Math.max(0, Math.min(1, (progress - p.start) / (p.end - p.start)));
+}
+
+function ease(t, exp = 2) {
+  return t < 0.5 ? Math.pow(t * 2, exp) / 2 : 1 - Math.pow((1 - t) * 2, exp) / 2;
+}
+function easeOut(t) { return 1 - Math.pow(1 - t, 2.5); }
+function easeIn(t)  { return Math.pow(t, 2.5); }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+// ═══════════════════════════════════════════════════════════
+//  EYE DRAWING
+// ═══════════════════════════════════════════════════════════
+
+function getEye(side) {
+  const xf = side === 'L' ? EYE_DEF.L.xf : EYE_DEF.R.xf;
+  const yf = side === 'L' ? EYE_DEF.L.yf : EYE_DEF.R.yf;
+  // Image drawn to fill canvas proportionally (cover)
+  const imgAspect = 3 / 4;
+  const canAspect = W / H;
+  let iw, ih, ox, oy;
+  if (canAspect > imgAspect) {
+    iw = W; ih = W / imgAspect; ox = 0; oy = (H - ih) / 2;
+  } else {
+    ih = H; iw = H * imgAspect; ox = (W - iw) / 2; oy = 0;
+  }
+  return {
+    x: ox + xf * iw,
+    y: oy + yf * ih,
+    r: EYE_DEF.rf * iw,   // iris radius
+    iw, ih, ox, oy
+  };
+}
+
+// Draw one eye overlay: white sclera + iris at rollOffset (-1=up, 0=normal, 1=down)
+// whiteBlend: 0=normal, 1=fully white (rolled back)
+// runeIdx: -1 = no rune, 0..n = draw that rune
+function drawEyeOverlay(side, rollOffset, whiteBlend, runeIdx, runeAlpha, runeGlow) {
+  const e = getEye(side);
+  const cx = e.x, cy = e.y, r = e.r;
+
+  ctx.save();
+  // Clip to eye circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 1.05, 0, Math.PI * 2);
+  ctx.clip();
+
+  // 1. White fill (the rolled-back sclera)
+  if (whiteBlend > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${whiteBlend})`;
+    ctx.fillRect(cx - r * 1.5, cy - r * 1.5, r * 3, r * 3);
   }
 
-  window.addEventListener('scroll', () => {
-    if (!raf) raf = requestAnimationFrame(update);
-  }, { passive: true });
+  // 2. Iris — displaced vertically by rollOffset * r * 2
+  if (whiteBlend < 0.98) {
+    const irisCy = cy + rollOffset * r * 2.2;
+    const irisAlpha = 1 - whiteBlend;
 
-  update();
+    // Iris base (dark brown)
+    ctx.globalAlpha = irisAlpha;
+    const grad = ctx.createRadialGradient(cx, irisCy, 0, cx, irisCy, r);
+    grad.addColorStop(0,    '#1a0f00');
+    grad.addColorStop(0.25, '#3d1e00');
+    grad.addColorStop(0.6,  '#6b3800');
+    grad.addColorStop(0.85, '#8b4f00');
+    grad.addColorStop(1,    '#2a1400');
+    ctx.beginPath(); ctx.arc(cx, irisCy, r, 0, Math.PI * 2);
+    ctx.fillStyle = grad; ctx.fill();
+
+    // Pupil
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(cx, irisCy, r * 0.38, 0, Math.PI * 2); ctx.fill();
+
+    // Catchlight
+    ctx.globalAlpha = irisAlpha * 0.8;
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.arc(cx - r*0.22, irisCy - r*0.28, r*0.12, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+
+  // 3. Rune — drawn ON TOP, outside clip so it bleeds slightly
+  if (runeIdx >= 0 && runeAlpha > 0) {
+    ctx.save();
+    ctx.globalAlpha = runeAlpha;
+
+    if (runeGlow > 0) {
+      ctx.shadowColor = runeIdx === 0 ? '#00ffcc' : '#ff2d78';
+      ctx.shadowBlur  = r * 3 * runeGlow;
+    }
+
+    // Rune colour: cold teal for first, hot pink for second
+    ctx.strokeStyle = runeIdx === 0
+      ? `rgba(0, 240, 200, ${runeAlpha})`
+      : `rgba(255, 45, 120, ${runeAlpha})`;
+
+    RUNE_SEQ[runeIdx](ctx, cx, cy, r);
+
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+}
+
+// Outer eye glow (ambient around eye area)
+function drawEyeGlow(side, color, alpha) {
+  if (alpha <= 0) return;
+  const e = getEye(side);
+  const grad = ctx.createRadialGradient(e.x, e.y, e.r * 0.5, e.x, e.y, e.r * 3.5);
+  grad.addColorStop(0,   color.replace('1)', `${alpha * 0.6})`));
+  grad.addColorStop(0.5, color.replace('1)', `${alpha * 0.2})`));
+  grad.addColorStop(1,   color.replace('1)', '0)'));
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MAIN DRAW
+// ═══════════════════════════════════════════════════════════
+let lastProgress = -1;
+
+function draw(progress) {
+  ctx.clearRect(0, 0, W, H);
+
+  // ── Draw face image (cover fit) ──────────────────────────
+  const imgAspect = 3 / 4;
+  const canAspect = W / H;
+  let iw, ih, ox, oy;
+  if (canAspect > imgAspect) {
+    iw = W; ih = W / imgAspect; ox = 0; oy = (H - ih) / 2;
+  } else {
+    ih = H; iw = H * imgAspect; ox = (W - iw) / 2; oy = 0;
+  }
+  ctx.drawImage(face, ox, oy, iw, ih);
+
+  // ── Compute per-phase values ─────────────────────────────
+
+  // p0: normal (nothing)
+  const p1 = phaseProgress(progress, 1); // roll up 1
+  const p2 = phaseProgress(progress, 2); // rune 1
+  const p3 = phaseProgress(progress, 3); // roll down
+  const p4 = phaseProgress(progress, 4); // roll up 2
+  const p5 = phaseProgress(progress, 5); // rune 2
+  const p6 = phaseProgress(progress, 6); // white hold
+  const p7 = phaseProgress(progress, 7); // return normal
+
+  // Roll offset: -1 = iris at top (rolled back), 0 = normal
+  let rollOffset = 0;
+  // Phase 1: ease in to -1
+  if (p1 > 0) rollOffset = -easeOut(p1);
+  // Phase 2: stay at -1
+  if (p2 > 0) rollOffset = -1;
+  // Phase 3: ease back to 0, then briefly
+  if (p3 > 0) rollOffset = -1 + easeOut(p3);
+  // Phase 4: roll back up to -1
+  if (p4 > 0) rollOffset = -easeOut(p4);
+  // Phase 5: stay at -1
+  if (p5 > 0) rollOffset = -1;
+  // Phase 6: white hold, no iris visible
+  if (p6 > 0) rollOffset = -1;
+  // Phase 7: iris slides back down from -1 to 0
+  if (p7 > 0) rollOffset = -1 + easeOut(p7);
+
+  // White blend: how much the eye is white
+  let whiteBlend = 0;
+  if (p1 > 0) whiteBlend = easeOut(p1);
+  if (p2 > 0) whiteBlend = 1;
+  if (p3 > 0) whiteBlend = 1 - easeOut(p3) * 0.7; // partial return
+  if (p4 > 0) whiteBlend = 0.3 + easeOut(p4) * 0.7; // re-whiten
+  if (p5 > 0) whiteBlend = 1;
+  if (p6 > 0) whiteBlend = 1;
+  if (p7 > 0) whiteBlend = 1 - easeOut(p7);
+
+  // Rune 1 alpha
+  let rune1Alpha = 0;
+  if (p2 > 0 && p3 === 0) rune1Alpha = ease(p2);
+  if (p3 > 0) rune1Alpha = Math.max(0, 1 - easeIn(p3) * 2);
+
+  // Rune 2 alpha
+  let rune2Alpha = 0;
+  if (p5 > 0 && p6 === 0) rune2Alpha = ease(p5);
+  if (p6 > 0) rune2Alpha = Math.max(0, 1 - easeIn(p6));
+  if (p7 > 0) rune2Alpha = 0;
+
+  // Rune glow pulse
+  const glowPulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.004);
+
+  // Ambient glow colour
+  let glowColor = 'rgba(0,240,200,1)';
+  let glowAlpha = 0;
+  if (p2 > 0 && p3 === 0) { glowColor = 'rgba(0,240,200,1)'; glowAlpha = easeOut(p2) * 0.7; }
+  if (p3 > 0) glowAlpha = Math.max(0, 0.7 - easeIn(p3) * 0.7);
+  if (p5 > 0 && p6 === 0) { glowColor = 'rgba(255,45,120,1)'; glowAlpha = easeOut(p5) * 0.8; }
+  if (p6 > 0 && p7 === 0) { glowColor = 'rgba(255,45,120,1)'; glowAlpha = Math.max(0, 0.8 - easeOut(p6) * 0.6); }
+
+  // ── Draw both eyes ───────────────────────────────────────
+  const activeRuneIdx = rune2Alpha > 0 ? 1 : (rune1Alpha > 0 ? 0 : -1);
+  const activeRuneAlpha = rune2Alpha > 0 ? rune2Alpha : rune1Alpha;
+
+  ['L', 'R'].forEach(side => {
+    drawEyeGlow(side, glowColor, glowAlpha);
+    drawEyeOverlay(side, rollOffset, whiteBlend, activeRuneIdx, activeRuneAlpha, glowPulse);
+  });
+
+  // ── Vignette ─────────────────────────────────────────────
+  const vig = ctx.createRadialGradient(W/2, H/2, H*0.25, W/2, H/2, H*0.85);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.75)');
+  ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+
+  // ── Phase label ─────────────────────────────────────────
+  const currentPhase = PHASES.find(p => progress >= p.start && progress <= p.end);
+  phaseLabel.textContent = currentPhase ? currentPhase.name : '';
+  phaseLabel.style.color = activeRuneIdx === 1 ? 'rgba(255,45,120,0.5)' : 'rgba(0,240,200,0.4)';
+
+  // ── Scroll hint ──────────────────────────────────────────
+  hintEl.classList.toggle('fade', progress > 0.06);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SCROLL HANDLER
+// ═══════════════════════════════════════════════════════════
+const SCROLL_TOTAL = scroller.scrollHeight - window.innerHeight;
+
+function onScroll() {
+  const progress = clamp(scroller.scrollTop / SCROLL_TOTAL, 0, 1);
+  lastProgress = progress;
+}
+scroller.addEventListener('scroll', onScroll, { passive: true });
+
+// ═══════════════════════════════════════════════════════════
+//  ANIMATION LOOP — runs always (for glow pulse)
+// ═══════════════════════════════════════════════════════════
+function loop() {
+  draw(lastProgress < 0 ? 0 : lastProgress);
+  requestAnimationFrame(loop);
+}
+
+face.onload = () => {
+  lastProgress = 0;
+  loop();
+};
+// If already loaded (cached)
+if (face.complete) { lastProgress = 0; loop(); }
 </script>
 </body>
 </html>
