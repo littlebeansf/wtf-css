@@ -143,6 +143,41 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// WHEEL FORWARDING — send wheel events into the active iframe
+// The canvas-area has overflow:hidden so wheel events never reach the iframe document.
+// We capture them here and re-dispatch into contentWindow.
+document.getElementById('canvasArea').addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const iframe = document.querySelector('#demoFrame iframe');
+  if (!iframe || !iframe.contentWindow) return;
+  iframe.contentWindow.dispatchEvent(
+    new WheelEvent('wheel', {
+      deltaX: e.deltaX,
+      deltaY: e.deltaY,
+      deltaZ: e.deltaZ,
+      deltaMode: e.deltaMode,
+      bubbles: true,
+      cancelable: true,
+    })
+  );
+}, { passive: false });
+
+// TOUCH FORWARDING — same for touch scroll on mobile
+let _touchY = 0;
+document.getElementById('canvasArea').addEventListener('touchstart', (e) => {
+  _touchY = e.touches[0].clientY;
+  const iframe = document.querySelector('#demoFrame iframe');
+  if (iframe && iframe.contentWindow)
+    iframe.contentWindow.dispatchEvent(new TouchEvent('touchstart', { touches: e.touches, bubbles: true }));
+}, { passive: true });
+
+document.getElementById('canvasArea').addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  const iframe = document.querySelector('#demoFrame iframe');
+  if (iframe && iframe.contentWindow)
+    iframe.contentWindow.dispatchEvent(new TouchEvent('touchmove', { touches: e.touches, bubbles: true, cancelable: true }));
+}, { passive: false });
+
 // INIT — load first demo
 window.addEventListener('DOMContentLoaded', () => {
   const firstBtn = document.querySelector('[data-demo="seidr"]');
