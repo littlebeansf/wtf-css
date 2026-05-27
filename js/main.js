@@ -3,11 +3,11 @@
    ============================================ */
 
 const DEMOS = {
-  eyelid: {
+  seidr: {
     num: '01',
-    name: 'Eye Awakening',
-    tech: 'scroll + clip-path',
-    file: 'demos/eyelid.html'
+    name: 'SEIÐR',
+    tech: 'canvas iris + runes',
+    file: 'demos/seidr.html'
   },
   liquid: {
     num: '02',
@@ -32,12 +32,6 @@ const DEMOS = {
     name: 'Matter → Ghost',
     tech: 'canvas pixel sampling',
     file: 'demos/particles.html'
-  },
-  seidr: {
-    num: '06',
-    name: 'SEIÐR',
-    tech: 'canvas iris + runes',
-    file: 'demos/seidr.html'
   }
 };
 
@@ -151,6 +145,6 @@ document.addEventListener('keydown', e => {
 
 // INIT — load first demo
 window.addEventListener('DOMContentLoaded', () => {
-  const firstBtn = document.querySelector('[data-demo="eyelid"]');
-  loadDemo('eyelid', firstBtn);
+  const firstBtn = document.querySelector('[data-demo="seidr"]');
+  loadDemo('seidr', firstBtn);
 });
