@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INK BLEED</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #f5f0e8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'Georgia', serif;
+    cursor: crosshair;
+  }
+
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  #ui {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(30,20,10,0.35);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    pointer-events: none;
+    font-family: 'Courier New', monospace;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+<div id="ui">click to bleed — move to diffuse</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+// Fluid simulation grid
+let grid, gridOld;
+let inkR, inkG, inkB;
+let inkROld, inkGOld, inkBOld;
+
+const SCALE = 4; // simulation resolution divisor
+let gW, gH;
+
+// Diffusion constants
+const DIFF = 0.00015;
+const VISC = 0.000002;
+const DT = 0.15;
+const ITER = 4;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  gW = Math.floor(W / SCALE);
+  gH = Math.floor(H / SCALE);
+  initGrids();
+  drawLetters();
+}
+
+function initGrids() {
+  const n = gW * gH;
+  grid    = { vx: new Float32Array(n), vy: new Float32Array(n), dens: new Float32Array(n) };
+  gridOld = { vx: new Float32Array(n), vy: new Float32Array(n), dens: new Float32Array(n) };
+  inkR    = new Float32Array(n);
+  inkG    = new Float32Array(n);
+  inkB    = new Float32Array(n);
+  inkROld = new Float32Array(n);
+  inkGOld = new Float32Array(n);
+  inkBOld = new Float32Array(n);
+}
+
+// Helpers
+const IX = (x, y) => Math.max(0, Math.min(gW*gH-1, Math.round(x) + Math.round(y) * gW));
+
+function addSource(x, dens) {
+  for (let i = 0; i < x.length; i++) x[i] += DT * dens[i];
+}
+
+function setBnd(b, x) {
+  for (let i = 1; i < gW - 1; i++) {
+    x[IX(i, 0)]      = b === 2 ? -x[IX(i, 1)]      : x[IX(i, 1)];
+    x[IX(i, gH - 1)] = b === 2 ? -x[IX(i, gH - 2)] : x[IX(i, gH - 2)];
+  }
+  for (let j = 1; j < gH - 1; j++) {
+    x[IX(0, j)]      = b === 1 ? -x[IX(1, j)]      : x[IX(1, j)];
+    x[IX(gW - 1, j)] = b === 1 ? -x[IX(gW - 2, j)] : x[IX(gW - 2, j)];
+  }
+  x[IX(0, 0)]           = 0.5 * (x[IX(1, 0)]           + x[IX(0, 1)]);
+  x[IX(0, gH - 1)]      = 0.5 * (x[IX(1, gH - 1)]      + x[IX(0, gH - 2)]);
+  x[IX(gW - 1, 0)]      = 0.5 * (x[IX(gW - 2, 0)]      + x[IX(gW - 1, 1)]);
+  x[IX(gW - 1, gH - 1)] = 0.5 * (x[IX(gW - 2, gH - 1)] + x[IX(gW - 1, gH - 2)]);
+}
+
+function linSolve(b, x, x0, a, c) {
+  const inv = 1.0 / c;
+  for (let k = 0; k < ITER; k++) {
+    for (let j = 1; j < gH - 1; j++) {
+      for (let i = 1; i < gW - 1; i++) {
+        x[IX(i,j)] = (x0[IX(i,j)] + a * (x[IX(i-1,j)] + x[IX(i+1,j)] + x[IX(i,j-1)] + x[IX(i,j+1)])) * inv;
+      }
+    }
+    setBnd(b, x);
+  }
+}
+
+function diffuse(b, x, x0, diff) {
+  const a = DT * diff * (gW - 2) * (gH - 2);
+  linSolve(b, x, x0, a, 1 + 6 * a);
+}
+
+function advect(b, d, d0, vx, vy) {
+  const dtx = DT * (gW - 2);
+  const dty = DT * (gH - 2);
+  for (let j = 1; j < gH - 1; j++) {
+    for (let i = 1; i < gW - 1; i++) {
+      let x = i - dtx * vx[IX(i, j)];
+      let y = j - dty * vy[IX(i, j)];
+      x = Math.max(0.5, Math.min(gW - 1.5, x));
+      y = Math.max(0.5, Math.min(gH - 1.5, y));
+      const i0 = Math.floor(x), i1 = i0 + 1;
+      const j0 = Math.floor(y), j1 = j0 + 1;
+      const s1 = x - i0, s0 = 1 - s1;
+      const t1 = y - j0, t0 = 1 - t1;
+      d[IX(i, j)] = s0*(t0*d0[IX(i0,j0)] + t1*d0[IX(i0,j1)]) +
+                    s1*(t0*d0[IX(i1,j0)] + t1*d0[IX(i1,j1)]);
+    }
+  }
+  setBnd(b, d);
+}
+
+function project(vx, vy, p, div) {
+  const hx = 1.0 / gW, hy = 1.0 / gH;
+  for (let j = 1; j < gH - 1; j++) {
+    for (let i = 1; i < gW - 1; i++) {
+      div[IX(i,j)] = -0.5 * (hx*(vx[IX(i+1,j)] - vx[IX(i-1,j)]) + hy*(vy[IX(i,j+1)] - vy[IX(i,j-1)]));
+      p[IX(i,j)] = 0;
+    }
+  }
+  setBnd(0, div); setBnd(0, p);
+  linSolve(0, p, div, 1, 6);
+  for (let j = 1; j < gH - 1; j++) {
+    for (let i = 1; i < gW - 1; i++) {
+      vx[IX(i,j)] -= 0.5 * (p[IX(i+1,j)] - p[IX(i-1,j)]) / hx;
+      vy[IX(i,j)] -= 0.5 * (p[IX(i,j+1)] - p[IX(i,j-1)]) / hy;
+    }
+  }
+  setBnd(1, vx); setBnd(2, vy);
+}
+
+function velStep(vx, vy, vx0, vy0) {
+  addSource(vx, vx0); addSource(vy, vy0);
+  [vx0, vx] = [vx, vx0]; diffuse(1, vx, vx0, VISC);
+  [vy0, vy] = [vy, vy0]; diffuse(2, vy, vy0, VISC);
+  project(vx, vy, vx0, vy0);
+  [vx0, vx] = [vx, vx0]; [vy0, vy] = [vy, vy0];
+  advect(1, vx, vx0, vx0, vy0);
+  advect(2, vy, vy0, vx0, vy0);
+  project(vx, vy, vx0, vy0);
+}
+
+function densStep(x, x0, vx, vy) {
+  addSource(x, x0);
+  [x0, x] = [x, x0]; diffuse(0, x, x0, DIFF);
+  [x0, x] = [x, x0]; advect(0, x, x0, vx, vy);
+}
+
+// Word layout — "INK BLEED" rendered as large text, sampled for seed points
+const WORDS = ['DISSOLVE', 'INK', 'BLEED', 'FADE'];
+let letterSeeds = [];
+
+function drawLetters() {
+  // We'll store letter bounding boxes to seed ink drops on click
+  letterSeeds = [];
+
+  // Render text to a temp canvas, sample pixels for seed positions
+  const tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  const tc = tmp.getContext('2d');
+
+  const fontSize = Math.min(W * 0.22, H * 0.38);
+  tc.font = `900 ${fontSize}px Georgia, serif`;
+  tc.textAlign = 'center';
+  tc.textBaseline = 'middle';
+  tc.fillStyle = '#1a1008';
+
+  const word = WORDS[Math.floor(Math.random() * WORDS.length)];
+  tc.fillText(word, W / 2, H / 2);
+
+  // Sample dark pixels
+  const data = tc.getImageData(0, 0, W, H).data;
+  const step = 6;
+  for (let y = 0; y < H; y += step) {
+    for (let x = 0; x < W; x += step) {
+      const i = (y * W + x) * 4;
+      if (data[i+3] > 100) {
+        letterSeeds.push({ x: x / SCALE, y: y / SCALE });
+      }
+    }
+  }
+}
+
+// Mouse state
+let mouseX = 0, mouseY = 0, prevMouseX = 0, prevMouseY = 0;
+let isMouseDown = false;
+
+// Ink colors palette (deep, watery tones)
+const PALETTE = [
+  [15, 8, 40],    // indigo black
+  [5, 30, 55],    // ocean night
+  [50, 10, 20],   // dried blood
+  [10, 40, 25],   // forest dark
+  [60, 15, 5],    // rust
+];
+
+let currentColor = PALETTE[0];
+
+function splashAt(gx, gy, radius, strength) {
+  currentColor = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+  const r = Math.ceil(radius);
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      const d = Math.sqrt(dx*dx + dy*dy);
+      if (d > radius) continue;
+      const falloff = 1 - d / radius;
+      const nx = Math.round(gx + dx), ny = Math.round(gy + dy);
+      if (nx < 1 || nx >= gW-1 || ny < 1 || ny >= gH-1) continue;
+      const idx = IX(nx, ny);
+      inkROld[idx] += currentColor[0] * falloff * strength;
+      inkGOld[idx] += currentColor[1] * falloff * strength;
+      inkBOld[idx] += currentColor[2] * falloff * strength;
+    }
+  }
+}
+
+function addForce(gx, gy, fx, fy, radius) {
+  const r = Math.ceil(radius);
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      const d = Math.sqrt(dx*dx + dy*dy);
+      if (d > radius) continue;
+      const falloff = (1 - d / radius) * 0.5;
+      const nx = Math.round(gx + dx), ny = Math.round(gy + dy);
+      if (nx < 1 || nx >= gW-1 || ny < 1 || ny >= gH-1) continue;
+      const idx = IX(nx, ny);
+      gridOld.vx[idx] += fx * falloff;
+      gridOld.vy[idx] += fy * falloff;
+    }
+  }
+}
+
+// Render fluid to canvas
+let imgData;
+function render() {
+  if (!imgData || imgData.width !== W || imgData.height !== H) {
+    imgData = ctx.createImageData(W, H);
+  }
+
+  const d = imgData.data;
+
+  // Background: warm paper color
+  const bgR = 245, bgG = 240, bgB = 232;
+
+  for (let j = 0; j < gH; j++) {
+    for (let i = 0; i < gW; i++) {
+      const gi = IX(i, j);
+      const r = inkR[gi];
+      const g = inkG[gi];
+      const b = inkB[gi];
+
+      // Map density to screen pixels
+      const x0 = i * SCALE, y0 = j * SCALE;
+
+      for (let py = 0; py < SCALE; py++) {
+        for (let px = 0; px < SCALE; px++) {
+          const sx = x0 + px, sy = y0 + py;
+          if (sx >= W || sy >= H) continue;
+          const pi = (sy * W + sx) * 4;
+
+          // Ink blending: ink over paper
+          const alpha = Math.min(1, (r + g + b) * 0.007);
+          const rn = r / Math.max(1, r + g + b);
+          const gn = g / Math.max(1, r + g + b);
+          const bn = b / Math.max(1, r + g + b);
+
+          const inkR_ = rn * 20;
+          const inkG_ = gn * 20;
+          const inkB_ = bn * 25;
+
+          // Watercolor: ink mixes with paper, preserving paper texture warmth
+          const wetness = Math.min(1, alpha * 1.5);
+          d[pi]   = Math.round(bgR * (1 - wetness) + inkR_ * wetness);
+          d[pi+1] = Math.round(bgG * (1 - wetness) + inkG_ * wetness);
+          d[pi+2] = Math.round(bgB * (1 - wetness) + inkB_ * wetness);
+          d[pi+3] = 255;
+        }
+      }
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+}
+
+// Gravity drips — ink slowly bleeds downward like water
+function applyGravity() {
+  const g = 0.00008;
+  for (let j = 1; j < gH - 1; j++) {
+    for (let i = 1; i < gW - 1; i++) {
+      const idx = IX(i, j);
+      if (inkR[idx] + inkG[idx] + inkB[idx] > 5) {
+        gridOld.vy[idx] += g * (inkR[idx] + inkG[idx] + inkB[idx]) * 0.002;
+      }
+    }
+  }
+}
+
+// Evaporation — ink slowly fades
+function evaporate() {
+  const ev = 0.9992;
+  for (let i = 0; i < inkR.length; i++) {
+    inkR[i] *= ev;
+    inkG[i] *= ev;
+    inkB[i] *= ev;
+    if (inkR[i] < 0.01) inkR[i] = 0;
+    if (inkG[i] < 0.01) inkG[i] = 0;
+    if (inkB[i] < 0.01) inkB[i] = 0;
+  }
+}
+
+// Initial ink: stamp the current word
+function stampWord() {
+  const sample = letterSeeds.length > 400
+    ? letterSeeds.filter((_, i) => i % 3 === 0)
+    : letterSeeds;
+
+  const color = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+  for (const seed of sample) {
+    const idx = IX(seed.x, seed.y);
+    inkROld[idx] += color[0] * 0.8;
+    inkGOld[idx] += color[1] * 0.8;
+    inkBOld[idx] += color[2] * 0.8;
+    // tiny random turbulence
+    gridOld.vx[idx] += (Math.random() - 0.5) * 0.002;
+    gridOld.vy[idx] += (Math.random() - 0.5) * 0.002;
+  }
+}
+
+// Animation loop
+let frame = 0;
+function loop() {
+  requestAnimationFrame(loop);
+  frame++;
+
+  // Mouse force
+  const gx = mouseX / SCALE;
+  const gy = mouseY / SCALE;
+  const fx = (mouseX - prevMouseX) / SCALE * 0.3;
+  const fy = (mouseY - prevMouseY) / SCALE * 0.3;
+  const speed = Math.sqrt(fx*fx + fy*fy);
+
+  if (speed > 0.05) {
+    addForce(gx, gy, fx, fy, 4);
+    if (speed > 0.5) {
+      // Drag picks up ink: stir nearby ink
+      splashAt(gx, gy, 2, speed * 0.3);
+    }
+  }
+
+  prevMouseX = mouseX;
+  prevMouseY = mouseY;
+
+  applyGravity();
+
+  // Fluid sim step
+  velStep(grid.vx, grid.vy, gridOld.vx, gridOld.vy);
+  densStep(inkR, inkROld, grid.vx, grid.vy);
+  densStep(inkG, inkGOld, grid.vx, grid.vy);
+  densStep(inkB, inkBOld, grid.vx, grid.vy);
+
+  // Clear sources
+  gridOld.vx.fill(0);
+  gridOld.vy.fill(0);
+  inkROld.fill(0);
+  inkGOld.fill(0);
+  inkBOld.fill(0);
+
+  evaporate();
+
+  // Every 800 frames — re-stamp fresh word
+  if (frame % 800 === 0) {
+    drawLetters();
+    stampWord();
+  }
+
+  render();
+}
+
+// Events
+canvas.addEventListener('mousemove', e => {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+
+canvas.addEventListener('click', e => {
+  const gx = e.clientX / SCALE;
+  const gy = e.clientY / SCALE;
+  // Big ink splash
+  splashAt(gx, gy, 6, 12);
+  // Radial burst force
+  for (let angle = 0; angle < Math.PI * 2; angle += 0.3) {
+    const r = 3;
+    const bx = gx + Math.cos(angle) * r;
+    const by = gy + Math.sin(angle) * r;
+    addForce(bx, by, Math.cos(angle) * 0.8, Math.sin(angle) * 0.8, 2);
+  }
+});
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  mouseX = e.touches[0].clientX;
+  mouseY = e.touches[0].clientY;
+}, { passive: false });
+
+canvas.addEventListener('touchstart', e => {
+  const touch = e.touches[0];
+  const gx = touch.clientX / SCALE;
+  const gy = touch.clientY / SCALE;
+  splashAt(gx, gy, 6, 12);
+});
+
+window.addEventListener('resize', resize);
+
+// Scroll to stir
+window.addEventListener('wheel', e => {
+  const gx = mouseX / SCALE;
+  const gy = mouseY / SCALE;
+  addForce(gx, gy, 0, e.deltaY * 0.0005, 8);
+  splashAt(gx, gy, 3, Math.abs(e.deltaY) * 0.02);
+});
+
+// Init
+resize();
+setTimeout(stampWord, 100);
+loop();
+</script>
+</body>
+</html>

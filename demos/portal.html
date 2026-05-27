@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Portal</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#000}
+#canvas{position:absolute;inset:0;width:100%;height:100%}
+#hint{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);font-family:'Courier New',monospace;font-size:.55rem;letter-spacing:.4em;color:rgba(100,200,255,.2);text-transform:uppercase;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hint">move to orbit · scroll to zoom recursion · click to invert</div>
+<script>
+/* ═══════════════════════════════════════════════════════
+   PORTAL — Infinite recursive viewport
+   
+   Two circular portals: looking into one shows what the
+   other sees, creating an infinite tunnel of depth.
+   Each portal has parallax — mouse shifts the perspective.
+   The recursion is rendered iteratively (not true recursion)
+   using offscreen canvases ping-ponged 8 levels deep.
+   ═══════════════════════════════════════════════════════ */
+
+const C   = document.getElementById('canvas');
+const ctx = C.getContext('2d');
+let W, H;
+
+const mouse = { x: 0.5, y: 0.5 };
+let zoomDepth = 6;    // recursion levels
+let inverted  = false;
+let t = 0;
+
+// Two offscreen canvases for ping-pong recursion
+const offA = new OffscreenCanvas(1, 1);
+const offB = new OffscreenCanvas(1, 1);
+const ctxA = offA.getContext('2d');
+const ctxB = offB.getContext('2d');
+
+function resize() {
+  W = C.width = C.offsetWidth;
+  H = C.height = C.offsetHeight;
+  offA.width = offB.width = W;
+  offA.height = offB.height = H;
+}
+
+// ── SCENE ELEMENTS ────────────────────────────────────────
+// A grid of stars/particles floating in the void
+const STARS = Array.from({length:120}, () => ({
+  x: Math.random(), y: Math.random(),
+  r: 0.5 + Math.random() * 1.5,
+  speed: 0.0002 + Math.random() * 0.0006,
+  phase: Math.random() * Math.PI * 2,
+  hue: Math.floor(Math.random() * 360),
+}));
+
+// Portal positions — slightly offset from center
+function getPortals() {
+  const cx = W / 2, cy = H / 2;
+  const sep = Math.min(W,H) * 0.22;
+  const angle = t * 0.12;
+  return [
+    { x: cx + sep * Math.cos(angle),       y: cy + sep * Math.sin(angle) * 0.5,       r: Math.min(W,H)*0.14 },
+    { x: cx + sep * Math.cos(angle + Math.PI), y: cy + sep * Math.sin(angle+Math.PI)*0.5, r: Math.min(W,H)*0.14 },
+  ];
+}
+
+function drawScene(targetCtx, tw, th, parallaxX, parallaxY, level, sourceCanvas) {
+  targetCtx.clearRect(0,0,tw,th);
+
+  // Deep space background
+  const bg = targetCtx.createRadialGradient(tw/2+parallaxX*20,th/2+parallaxY*20,0,tw/2,th/2,Math.max(tw,th));
+  if (inverted) {
+    bg.addColorStop(0,'#e8f4ff');
+    bg.addColorStop(0.5,'#c0e8ff');
+    bg.addColorStop(1,'#ffffff');
+  } else {
+    bg.addColorStop(0,'#020818');
+    bg.addColorStop(0.5,'#000510');
+    bg.addColorStop(1,'#000000');
+  }
+  targetCtx.fillStyle = bg;
+  targetCtx.fillRect(0,0,tw,th);
+
+  // Stars
+  STARS.forEach(s => {
+    const sx = ((s.x + s.speed * t + parallaxX * 0.02 * (1 + level*0.2)) % 1) * tw;
+    const sy = ((s.y + s.speed * t * 0.4 + parallaxY * 0.015) % 1) * th;
+    const pulse = 0.6 + 0.4 * Math.sin(t * 2 + s.phase);
+    targetCtx.beginPath();
+    targetCtx.arc(sx, sy, s.r * pulse, 0, Math.PI*2);
+    const sc = inverted
+      ? `hsla(${s.hue},60%,20%,${0.4*pulse})`
+      : `hsla(${s.hue},80%,85%,${0.6*pulse})`;
+    targetCtx.fillStyle = sc;
+    targetCtx.fill();
+  });
+
+  // Nebula wisps
+  for (let n = 0; n < 3; n++) {
+    const nx = tw * (0.2 + n * 0.3) + parallaxX * (10 + n*5);
+    const ny = th * (0.3 + 0.2 * Math.sin(t * 0.2 + n)) + parallaxY * (8 + n*3);
+    const nr = Math.min(tw,th) * (0.15 + 0.05 * Math.sin(t * 0.1 + n));
+    const ng = targetCtx.createRadialGradient(nx,ny,0,nx,ny,nr);
+    const h = (200 + n*50 + t*5) % 360;
+    ng.addColorStop(0, inverted ? `hsla(${h},60%,10%,0.12)` : `hsla(${h},80%,60%,0.07)`);
+    ng.addColorStop(1,'transparent');
+    targetCtx.fillStyle = ng;
+    targetCtx.fillRect(0,0,tw,th);
+  }
+
+  // If we have a source canvas (prior recursion level), draw portals showing it
+  const portals = getPortals();
+  if (sourceCanvas && level > 0) {
+    portals.forEach((p, pi) => {
+      targetCtx.save();
+      targetCtx.beginPath();
+      targetCtx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      targetCtx.clip();
+
+      // Scale+offset the source to create the "looking through" illusion
+      const scale = 0.62 + 0.08 * Math.sin(t * 0.3 + pi);
+      const shift = 8 * (pi === 0 ? 1 : -1);
+      targetCtx.translate(p.x, p.y);
+      targetCtx.scale(scale, scale);
+      targetCtx.translate(-p.x + shift * (mouse.x - 0.5) * 30, -p.y + shift * (mouse.y - 0.5) * 20);
+      targetCtx.drawImage(sourceCanvas, 0, 0, tw, th);
+
+      targetCtx.restore();
+
+      // Portal ring glow
+      const ringGrad = targetCtx.createRadialGradient(p.x,p.y,p.r*0.9,p.x,p.y,p.r*1.15);
+      const rHue = (pi * 180 + t * 20) % 360;
+      ringGrad.addColorStop(0, `hsla(${rHue},100%,70%,0.6)`);
+      ringGrad.addColorStop(0.5, `hsla(${rHue+30},100%,50%,0.2)`);
+      ringGrad.addColorStop(1, 'transparent');
+      targetCtx.fillStyle = ringGrad;
+      targetCtx.beginPath();
+      targetCtx.arc(p.x, p.y, p.r * 1.15, 0, Math.PI*2);
+      targetCtx.arc(p.x, p.y, p.r * 0.9, 0, Math.PI*2, true);
+      targetCtx.fill();
+
+      // Inner shimmer
+      targetCtx.save();
+      targetCtx.beginPath();
+      targetCtx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      targetCtx.clip();
+      const sh = targetCtx.createRadialGradient(
+        p.x + p.r*0.3*Math.cos(t+pi), p.y + p.r*0.3*Math.sin(t*0.7+pi), 0,
+        p.x, p.y, p.r
+      );
+      sh.addColorStop(0, `hsla(${rHue},100%,90%,0.15)`);
+      sh.addColorStop(1, 'transparent');
+      targetCtx.fillStyle = sh;
+      targetCtx.fill();
+      targetCtx.restore();
+    });
+  } else if (level === 0) {
+    // Deepest level: just a glowing core
+    portals.forEach((p, pi) => {
+      const rHue = (pi * 180 + t * 20) % 360;
+      const core = targetCtx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r);
+      core.addColorStop(0, `hsla(${rHue},100%,95%,0.9)`);
+      core.addColorStop(0.3, `hsla(${rHue},100%,60%,0.6)`);
+      core.addColorStop(1, `hsla(${rHue},100%,30%,0)`);
+      targetCtx.fillStyle = core;
+      targetCtx.beginPath();
+      targetCtx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      targetCtx.fill();
+    });
+  }
+}
+
+function tick() {
+  t += 0.016;
+  const px = mouse.x - 0.5;
+  const py = mouse.y - 0.5;
+  const depth = Math.round(zoomDepth);
+
+  // Build recursion bottom-up: level 0 → level N
+  // Level 0: deepest — just the raw scene, no portals
+  drawScene(ctxA, W, H, px, py, 0, null);
+
+  // Ping-pong between offA and offB for each level
+  let src = offA;
+  let dst = offB;
+  let srcCtx = ctxA;
+  let dstCtx = ctxB;
+
+  for (let lvl = 1; lvl <= depth; lvl++) {
+    drawScene(dstCtx, W, H, px * (1 + lvl * 0.3), py * (1 + lvl * 0.3), lvl, src);
+    // Swap
+    [src, dst] = [dst, src];
+    [srcCtx, dstCtx] = [dstCtx, srcCtx];
+  }
+
+  // Render final level to main canvas
+  ctx.clearRect(0,0,W,H);
+  ctx.drawImage(src, 0, 0);
+
+  // Screen-space scanline / film grain
+  const grain = ctx.createImageData(W, H);
+  const gd = grain.data;
+  for (let i = 0; i < gd.length; i+=4) {
+    const v = (Math.random() * 14)|0;
+    gd[i]=gd[i+1]=gd[i+2]=v; gd[i+3]=18;
+  }
+  ctx.putImageData(grain,0,0);
+
+  // Depth indicator
+  ctx.font = '9px Courier New';
+  ctx.fillStyle = 'rgba(100,200,255,0.2)';
+  ctx.textAlign = 'right';
+  ctx.fillText(`DEPTH × ${depth}  ${inverted?'[INV]':''}`, W-16, H-16);
+
+  requestAnimationFrame(tick);
+}
+
+window.addEventListener('mousemove', e => {
+  const r = C.getBoundingClientRect();
+  mouse.x = (e.clientX - r.left) / W;
+  mouse.y = (e.clientY - r.top)  / H;
+});
+window.addEventListener('wheel', e => {
+  e.preventDefault();
+  zoomDepth = Math.max(1, Math.min(10, zoomDepth - Math.sign(e.deltaY)));
+}, {passive:false});
+window.addEventListener('click', () => { inverted = !inverted; });
+window.addEventListener('touchmove', e => {
+  const r = C.getBoundingClientRect();
+  mouse.x = (e.touches[0].clientX-r.left)/W;
+  mouse.y = (e.touches[0].clientY-r.top)/H;
+},{passive:true});
+window.addEventListener('resize', resize);
+
+resize();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

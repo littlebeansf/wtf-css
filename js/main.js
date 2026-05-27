@@ -32,6 +32,36 @@ const DEMOS = {
     name: 'Matter → Ghost',
     tech: 'canvas pixel sampling',
     file: 'demos/particles.html'
+  },
+  magnetic: {
+    num: '06',
+    name: 'Magnetic Type',
+    tech: 'physics + force fields',
+    file: 'demos/magnetic.html'
+  },
+  flesh: {
+    num: '07',
+    name: 'Flesh Grid',
+    tech: 'organic canvas cells',
+    file: 'demos/flesh.html'
+  },
+  noise: {
+    num: '08',
+    name: 'Dead Signal',
+    tech: 'CRT phosphor + waveform',
+    file: 'demos/noise.html'
+  },
+  portal: {
+    num: '09',
+    name: 'Portal',
+    tech: 'recursive offscreen',
+    file: 'demos/portal.html'
+  },
+  ink: {
+    num: '10',
+    name: 'Ink Bleed',
+    tech: 'fluid diffusion',
+    file: 'demos/ink.html'
   }
 };
 

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Magnetic Typography</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#080808;font-family:'Courier New',monospace}
+#canvas{position:absolute;inset:0;width:100%;height:100%}
+#hint{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);font-size:.55rem;letter-spacing:.4em;color:rgba(255,255,255,.2);text-transform:uppercase;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hint">move · click to shatter · scroll to attract / repel</div>
+<script>
+const C = document.getElementById('canvas');
+const ctx = C.getContext('2d');
+let W, H;
+
+function resize(){
+  W = C.width  = C.offsetWidth;
+  H = C.height = C.offsetHeight;
+  initLetters();
+}
+
+// ── WORDS ───────────────────────────────────────────────
+const WORDS = ['GRAVITY','COLLAPSE','INFINITE','NOTHING','VOID','STRANGE','ATTRACT'];
+let wordIdx = 0;
+const FONT_SIZE = Math.min(window.innerWidth, window.innerHeight) * 0.13;
+
+// ── LETTER PARTICLES ────────────────────────────────────
+let letters = [];
+let mouse = {x: -9999, y: -9999};
+let mode = 'repel'; // 'repel' | 'attract'
+let shattered = false;
+let reforming = false;
+
+function getTargets(word, cx, cy) {
+  // Measure each character's position
+  ctx.font = `bold ${FONT_SIZE}px 'Courier New', monospace`;
+  const metrics = ctx.measureText(word);
+  const totalW = metrics.width;
+  const startX = cx - totalW / 2;
+  const targets = [];
+  let x = startX;
+  for (let i = 0; i < word.length; i++) {
+    const ch = word[i];
+    const cw = ctx.measureText(ch).width;
+    targets.push({ x: x + cw / 2, y: cy, ch });
+    x += cw;
+  }
+  return targets;
+}
+
+function initLetters(word) {
+  word = word || WORDS[wordIdx];
+  ctx.font = `bold ${FONT_SIZE}px 'Courier New', monospace`;
+  const targets = getTargets(word, W / 2, H / 2);
+  letters = targets.map((t, i) => ({
+    ch: t.ch,
+    x: shattered ? (Math.random() * W) : t.x,
+    y: shattered ? (Math.random() * H) : t.y,
+    vx: 0, vy: 0,
+    tx: t.x, ty: t.y,
+    size: FONT_SIZE,
+    hue: 200 + i * 22,
+    phase: Math.random() * Math.PI * 2,
+    mass: 0.8 + Math.random() * 0.4,
+  }));
+  shattered = false;
+  reforming = false;
+}
+
+function shatter() {
+  letters.forEach(l => {
+    l.vx = (Math.random() - 0.5) * 35;
+    l.vy = (Math.random() - 0.5) * 35 - 8;
+  });
+  shattered = true;
+  reforming = false;
+  // After 1.5s, switch word and reform
+  setTimeout(() => {
+    wordIdx = (wordIdx + 1) % WORDS.length;
+    const targets = getTargets(WORDS[wordIdx], W / 2, H / 2);
+    letters.forEach((l, i) => {
+      l.ch = targets[i % targets.length].ch;
+      l.tx = targets[i % targets.length].x;
+      l.ty = targets[i % targets.length].y;
+    });
+    reforming = true;
+  }, 1400);
+}
+
+// ── MAGNETIC FORCE ───────────────────────────────────────
+const REPEL_R  = 160;
+const ATTRACT_R = 220;
+const STRENGTH = 18000;
+
+function tick(t) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Background grid pulse
+  const gridA = 0.03 + 0.01 * Math.sin(t * 0.001);
+  ctx.strokeStyle = `rgba(255,255,255,${gridA})`;
+  ctx.lineWidth = 0.3;
+  const gs = 60;
+  for (let x = 0; x < W; x += gs) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y < H; y += gs) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  letters.forEach((l, i) => {
+    // Spring back to target
+    if (!shattered || reforming) {
+      const stiffness = reforming ? 0.04 : 0.06;
+      const damp = 0.82;
+      l.vx += (l.tx - l.x) * stiffness;
+      l.vy += (l.ty - l.y) * stiffness;
+      l.vx *= damp;
+      l.vy *= damp;
+    } else {
+      // Gravity while shattered
+      l.vy += 0.6;
+      l.vx *= 0.995;
+      l.vy *= 0.995;
+    }
+
+    // Mouse force
+    const dx = l.x - mouse.x;
+    const dy = l.y - mouse.y;
+    const dist = Math.sqrt(dx*dx+dy*dy) || 1;
+    const R = mode === 'repel' ? REPEL_R : ATTRACT_R;
+    if (dist < R) {
+      const force = STRENGTH / (dist * dist);
+      const dir = mode === 'repel' ? 1 : -1;
+      l.vx += dir * (dx / dist) * force * 0.01 * l.mass;
+      l.vy += dir * (dy / dist) * force * 0.01 * l.mass;
+    }
+
+    l.x += l.vx;
+    l.y += l.vy;
+
+    // Bounce off walls loosely
+    if (l.x < 40)  { l.x = 40;  l.vx *= -0.4; }
+    if (l.x > W-40){ l.x = W-40; l.vx *= -0.4; }
+    if (l.y < 40)  { l.y = 40;  l.vy *= -0.4; }
+    if (l.y > H-40){ l.y = H-40; l.vy *= -0.4; }
+
+    // Color based on velocity magnitude + hue
+    const speed = Math.sqrt(l.vx*l.vx+l.vy*l.vy);
+    const hue = (l.hue + t * 0.02 + speed * 3) % 360;
+    const lightness = 55 + Math.min(speed * 2, 35);
+    const alpha = 0.85 + Math.min(speed * 0.02, 0.15);
+
+    // Glow
+    const gR = 20 + speed * 4;
+    const grad = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, gR);
+    grad.addColorStop(0, `hsla(${hue},100%,70%,0.25)`);
+    grad.addColorStop(1, `hsla(${hue},100%,50%,0)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(l.x, l.y, gR, 0, Math.PI*2);
+    ctx.fill();
+
+    // Letter
+    ctx.save();
+    ctx.translate(l.x, l.y);
+    // Tilt based on velocity
+    ctx.rotate(Math.atan2(l.vy, l.vx) * 0.15);
+    ctx.font = `bold ${l.size}px 'Courier New', monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = `hsla(${hue},100%,${lightness}%,${alpha})`;
+    ctx.shadowColor = `hsla(${hue},100%,70%,0.8)`;
+    ctx.shadowBlur = 8 + speed * 1.5;
+    ctx.fillText(l.ch, 0, 0);
+    ctx.restore();
+
+    // Connection lines to neighbours
+    if (i < letters.length - 1) {
+      const n = letters[i+1];
+      const dd = Math.hypot(n.x - l.x, n.y - l.y);
+      if (dd < FONT_SIZE * 3) {
+        const lineA = Math.max(0, (1 - dd / (FONT_SIZE * 3)) * 0.3);
+        ctx.strokeStyle = `hsla(${hue},80%,60%,${lineA})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(l.x, l.y);
+        ctx.lineTo(n.x, n.y);
+        ctx.stroke();
+      }
+    }
+  });
+
+  // Mode indicator
+  ctx.font = '0.5rem Courier New';
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(`MODE: ${mode.toUpperCase()}`, W - 20, H - 20);
+
+  requestAnimationFrame(tick);
+}
+
+// ── EVENTS ──────────────────────────────────────────────
+window.addEventListener('mousemove', e => {
+  const r = C.getBoundingClientRect();
+  mouse.x = e.clientX - r.left;
+  mouse.y = e.clientY - r.top;
+});
+
+window.addEventListener('click', () => { if (!shattered) shatter(); });
+
+window.addEventListener('wheel', e => {
+  e.preventDefault();
+  mode = e.deltaY > 0 ? 'attract' : 'repel';
+}, { passive: false });
+
+window.addEventListener('touchmove', e => {
+  const r = C.getBoundingClientRect();
+  mouse.x = e.touches[0].clientX - r.left;
+  mouse.y = e.touches[0].clientY - r.top;
+}, { passive: true });
+
+window.addEventListener('touchstart', () => { if (!shattered) shatter(); });
+
+window.addEventListener('resize', resize);
+
+resize();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
