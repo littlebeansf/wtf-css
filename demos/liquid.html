@@ -6,22 +6,15 @@
 <title>Liquid Text</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #050505; height: 100vh; overflow: hidden; }
 
-  body {
-    background: #050505;
-    height: 100vh;
-    overflow: hidden;
-  }
-
-  /* Full-screen layered canvases */
-  canvas {
+  #c {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
   }
 
-  /* Instruction */
   .instruction {
     position: fixed;
     bottom: 28px;
@@ -34,15 +27,14 @@
     text-transform: uppercase;
     pointer-events: none;
     text-align: center;
-    z-index: 10;
   }
 
-  .technique-badge {
+  .badge {
     position: fixed;
     top: 70px;
     right: 24px;
     background: rgba(0,0,0,0.85);
-    border: 1px solid rgba(0,229,255,0.3);
+    border: 1px solid rgba(0,229,255,0.28);
     border-radius: 8px;
     padding: 12px 16px;
     font-family: 'Space Mono', monospace;
@@ -50,209 +42,167 @@
     color: rgba(0,229,255,0.8);
     pointer-events: none;
     line-height: 1.8;
-    backdrop-filter: blur(10px);
     max-width: 210px;
-    z-index: 10;
   }
-  .technique-badge strong {
-    color: #00e5ff;
-    display: block;
-    margin-bottom: 4px;
-  }
+  .badge strong { color: #00e5ff; display: block; margin-bottom: 4px; }
 
-  /* Filter SVG */
   .filter-svg { position: absolute; width: 0; height: 0; overflow: hidden; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono&display=swap" rel="stylesheet">
 </head>
 <body>
 
-<!-- SVG goo filter definition -->
+<!-- SVG GOO filter — applied to main canvas via CSS -->
 <svg class="filter-svg">
   <defs>
-    <filter id="goo" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="16" result="blur"/>
+    <filter id="goo" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="14" result="blur"/>
       <feColorMatrix in="blur" mode="matrix"
         values="1 0 0 0 0
                 0 1 0 0 0
                 0 0 1 0 0
-                0 0 0 26 -11"
+                0 0 0 25 -10"
         result="goo"/>
     </filter>
   </defs>
 </svg>
 
-<!-- LAYER 1: Metaballs (raw, unfiltered) — drawn into offscreen canvas, then goo-filtered via CSS onto this canvas -->
-<canvas id="ballCanvas"></canvas>
-
-<!-- LAYER 2: Text + clip effect -->
-<canvas id="textCanvas"></canvas>
+<!-- SINGLE canvas — everything rendered here -->
+<canvas id="c"></canvas>
 
 <div class="instruction">move your mouse · liquid fills the letters</div>
 
-<div class="technique-badge">
+<div class="badge">
   <strong>How it works</strong>
-  Canvas ball physics<br>
+  Single canvas pipeline<br>
+  Offscreen text mask<br>
+  destination-in composite<br>
   SVG goo threshold<br>
-  Canvas text clip mask<br>
-  Destination-in composite<br>
   Mouse attraction
 </div>
 
 <script>
-/* ══════════════════════════════════════════════════════
-   LIQUID TEXT — two-canvas approach
-   Canvas 1 (ballCanvas): draws metaballs, filtered with SVG goo via CSS
-   Canvas 2 (textCanvas): draws text as clip mask over a copy of balls
-   ══════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════
+   LIQUID TEXT v3 — single-canvas, offscreen compositing
 
-const ballC = document.getElementById('ballCanvas');
-const ballCtx = ballC.getContext('2d');
+   Pipeline per frame:
+   1. Draw metaballs on OFFSCREEN canvas (no filter)
+   2. Draw text on offscreen canvas using destination-in
+      → balls visible only through letter shapes
+   3. Copy offscreen → main canvas
+   4. Apply SVG goo filter on main canvas (CSS)
+      → rounds the letter edges, creates liquid merging effect
 
-const textC = document.getElementById('textCanvas');
-const textCtx = textC.getContext('2d');
+   Result: crisp coloured liquid filling letter shapes,
+   with organic goo physics where balls merge near edges.
+   ════════════════════════════════════════════════════ */
+
+const mainC   = document.getElementById('c');
+const mainCtx = mainC.getContext('2d');
+
+// Offscreen canvas (no CSS filter — raw pixels for compositing)
+const off     = new OffscreenCanvas(1, 1);
+const offCtx  = off.getContext('2d');
 
 let W, H;
-let mouse = { x: -999, y: -999 };
-let time = 0;
+const mouse = { x: -999, y: -999 };
 
-// Apply SVG goo filter to the ball canvas
-ballC.style.filter = 'url(#goo)';
+// Apply goo filter to the main canvas so the copied result gets liquid edges
+mainC.style.filter = 'url(#goo)';
 
 function resize() {
-  W = ballC.width  = textC.width  = window.innerWidth;
-  H = ballC.height = textC.height = window.innerHeight;
+  W = mainC.width = off.width  = window.innerWidth;
+  H = mainC.height = off.height = window.innerHeight;
 }
 resize();
-window.addEventListener('resize', () => { resize(); spawnBalls(); });
+window.addEventListener('resize', () => { resize(); initBalls(); });
 
-// ── FONT SIZE: fill ~70% of viewport width ──
-function getFontSize() {
-  return Math.floor(W * 0.40);
+// ── FONT ──
+function font() {
+  // Bold sans-serif, sized to ~40% of viewport width for "WTF"
+  return `900 ${Math.floor(W * 0.41)}px 'Impact','Arial Black',sans-serif`;
 }
 
-// ── METABALL ──
+// ── BALLS ──
 class Ball {
-  constructor(cfg, idx, total) {
-    this.r      = cfg.r;
+  constructor(cfg, i, n) {
     this.hue    = cfg.hue;
+    this.r      = cfg.r;
     this.orbitR = cfg.orbitR;
     this.speed  = cfg.speed;
-    this.angle  = (idx / total) * Math.PI * 2;
-    this.ox = W / 2;
-    this.oy = H / 2;
-    this.x  = this.ox;
-    this.y  = this.oy;
+    this.angle  = (i / n) * Math.PI * 2;
+    this.x = W / 2;
+    this.y = H / 2;
   }
-
   update() {
-    this.angle += this.speed * 0.011;
-    const bx = this.ox + Math.cos(this.angle) * this.orbitR;
-    const by = this.oy + Math.sin(this.angle * 1.25) * this.orbitR * 0.62;
-
-    // Mouse attraction
-    const dx = mouse.x - bx;
-    const dy = mouse.y - by;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const pull = dist < 300 ? (300 - dist) / 300 : 0;
-    this.x = bx + dx * pull * 0.38;
-    this.y = by + dy * pull * 0.38;
+    this.angle += this.speed * 0.012;
+    const bx = W/2 + Math.cos(this.angle) * this.orbitR;
+    const by = H/2 + Math.sin(this.angle * 1.27) * this.orbitR * 0.60;
+    const dx = mouse.x - bx, dy = mouse.y - by;
+    const d  = Math.hypot(dx, dy);
+    const pull = d < 320 ? (320 - d) / 320 : 0;
+    this.x = bx + dx * pull * 0.40;
+    this.y = by + dy * pull * 0.40;
   }
-
   draw(ctx) {
-    const g = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.r * 1.7);
-    g.addColorStop(0,    `hsla(${this.hue}, 100%, 70%, 1)`);
-    g.addColorStop(0.42, `hsla(${this.hue}, 100%, 58%, 0.88)`);
-    g.addColorStop(1,    `hsla(${this.hue}, 100%, 45%, 0)`);
+    const g = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.r * 1.8);
+    g.addColorStop(0,    `hsla(${this.hue},100%,72%,1)`);
+    g.addColorStop(0.45, `hsla(${this.hue},100%,58%,0.9)`);
+    g.addColorStop(1,    `hsla(${this.hue},100%,45%,0)`);
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r * 1.7, 0, Math.PI * 2);
+    ctx.arc(this.x, this.y, this.r * 1.8, 0, Math.PI * 2);
     ctx.fillStyle = g;
     ctx.fill();
   }
 }
 
-const CONFIGS = [
-  { hue: 340, r: 78, orbitR: 130, speed:  0.44 },
-  { hue: 280, r: 60, orbitR: 180, speed: -0.33 },
-  { hue: 190, r: 70, orbitR:  92, speed:  0.57 },
-  { hue: 320, r: 54, orbitR: 220, speed: -0.28 },
-  { hue: 200, r: 85, orbitR:  72, speed:  0.65 },
-  { hue: 350, r: 49, orbitR: 155, speed: -0.50 },
-  { hue: 240, r: 65, orbitR: 255, speed:  0.38 },
-  { hue:  20, r: 58, orbitR: 110, speed: -0.55 },
-  { hue: 160, r: 72, orbitR: 195, speed:  0.30 },
+const CFGS = [
+  { hue: 340, r: 80, orbitR: 125, speed:  0.44 },
+  { hue: 280, r: 62, orbitR: 175, speed: -0.33 },
+  { hue: 190, r: 72, orbitR:  88, speed:  0.57 },
+  { hue: 320, r: 56, orbitR: 215, speed: -0.28 },
+  { hue: 200, r: 86, orbitR:  68, speed:  0.64 },
+  { hue: 350, r: 50, orbitR: 152, speed: -0.49 },
+  { hue: 240, r: 66, orbitR: 248, speed:  0.37 },
+  { hue:  20, r: 58, orbitR: 108, speed: -0.54 },
+  { hue: 160, r: 74, orbitR: 188, speed:  0.31 },
 ];
-
 let balls = [];
-function spawnBalls() {
-  balls = CONFIGS.map((c, i) => new Ball(c, i, CONFIGS.length));
+function initBalls() {
+  balls = CFGS.map((c, i) => new Ball(c, i, CFGS.length));
 }
-spawnBalls();
+initBalls();
 
-// ── OFFSCREEN buffer for balls (needed for text masking) ──
-// We need a raw (unfiltered) version for the text canvas
-function drawBallsToCtx(ctx) {
-  ctx.clearRect(0, 0, W, H);
-  balls.forEach(b => b.draw(ctx));
-}
+// ── RENDER ──
+function render() {
+  // 1. Draw metaballs on offscreen
+  offCtx.clearRect(0, 0, W, H);
+  balls.forEach(b => b.draw(offCtx));
 
-// ── TEXT CANVAS: draws text mask over ball colours ──
-function drawTextCanvas() {
-  textCtx.clearRect(0, 0, W, H);
+  // 2. Mask to text shape: destination-in keeps only pixels covered by text
+  offCtx.globalCompositeOperation = 'destination-in';
+  offCtx.font = font();
+  offCtx.textAlign = 'center';
+  offCtx.textBaseline = 'middle';
+  offCtx.fillStyle = '#fff';
+  offCtx.fillText('WTF', W / 2, H / 2);
+  offCtx.globalCompositeOperation = 'source-over';
 
-  // Step 1: draw the ball colours (raw, no goo filter)
-  balls.forEach(b => b.draw(textCtx));
-
-  // Step 2: apply text as destination-in mask
-  // destination-in = only keep pixels WHERE the new drawing covers
-  textCtx.globalCompositeOperation = 'destination-in';
-
-  const fs = getFontSize();
-  textCtx.font = `900 ${fs}px 'Arial Black', 'Impact', sans-serif`;
-  textCtx.textAlign = 'center';
-  textCtx.textBaseline = 'middle';
-  textCtx.fillStyle = '#fff';
-  textCtx.fillText('WTF', W / 2, H / 2);
-
-  // Reset
-  textCtx.globalCompositeOperation = 'source-over';
+  // 3. Copy composited result to main canvas (which has CSS goo filter)
+  mainCtx.clearRect(0, 0, W, H);
+  mainCtx.drawImage(off, 0, 0);
 }
 
-// ── OUTLINE / GHOST TEXT behind: drawn on ball canvas in screen mode ──
-function drawGhostText(ctx) {
-  const fs = getFontSize();
-  ctx.save();
-  ctx.font = `900 ${fs}px 'Arial Black', 'Impact', sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.lineWidth = 2;
-  ctx.strokeText('WTF', W / 2, H / 2);
-  ctx.restore();
-}
-
-// ── ANIMATE ──
-function animate() {
+// ── TICK ──
+function tick() {
   balls.forEach(b => b.update());
-
-  // Ball canvas — raw blobs (CSS goo filter merges them)
-  drawBallsToCtx(ballCtx);
-  drawGhostText(ballCtx);
-
-  // Text canvas — ball colours clipped to letter shapes
-  drawTextCanvas();
-
-  time++;
-  requestAnimationFrame(animate);
+  render();
+  requestAnimationFrame(tick);
 }
-animate();
+tick();
 
-// ── MOUSE / TOUCH ──
-window.addEventListener('mousemove', e => {
-  mouse.x = e.clientX;
-  mouse.y = e.clientY;
-});
+// ── INPUT ──
+window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 window.addEventListener('touchmove', e => {
   mouse.x = e.touches[0].clientX;
   mouse.y = e.touches[0].clientY;
